@@ -288,6 +288,22 @@
   buildTools();
   $("chart").querySelector(".overlay").addEventListener("pointerdown", stepCount);
 
+  // 지금 차트(그린 선·포지션 선 포함)를 일지에 넣기
+  $("shotBtn").onclick = async () => {
+    stopTool();
+    const img = await chartShot();
+    if (!img) { toast("차트를 찍지 못했어요"); return; }
+    const p = price();
+    const e = { id: Store.uid("s"), kind: "shot", date: today(), time: nowHM(), text: `${st.coin} ${Market.TF[st.tf].name}${p ? " · " + Chart.fmtP(p) : ""}`, mood: [], img, imgEdit: null };
+    await Store.put("journal", e); await loadData();
+    sheet(`<div class="sh"><h2>일지에 넣었어요</h2><button class="ghost" id="shX">닫기</button></div>
+      <p class="mut sm" style="margin-top:0">${esc(e.date)} ${esc(e.time)} · ${esc(e.text)}</p><img class="pic" src="${img}" alt="차트">
+      <div class="row"><button class="primary" id="shotDraw">✏️ 지금 그리기·글씨</button><button id="shotGo">일지 보기</button></div>`);
+    $("shX").onclick = closeSheet;
+    $("shotDraw").onclick = async () => { closeSheet(); await new Promise((r) => setTimeout(r, 50)); await editRecordImage("journal", e, "img"); };
+    $("shotGo").onclick = () => { closeSheet(); lastTab = "vJournal"; $("jDate").value = today(); showView("vJournal"); renderJournal(); };
+  };
+
   // 분석 자료
   $("anaBtn").onclick = async () => {
     stopTool();
@@ -667,7 +683,7 @@
       $("jMsg").textContent = "";
     }
     const items = [
-      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
@@ -1101,7 +1117,7 @@
         + `${(t.closeMood || []).length ? `\n  청산 때 심리: ${t.closeMood.join(", ")}` : ""}${t.lesson ? `\n  청산 후 생각: ${t.lesson}` : ""}`);
     }
     lines.push("", `[일지·메모 ${jr.length}개]`);
-    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
+    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
     return lines.join("\n");
   }
   $("taCopy").onclick = () => copyText(auditText(taDays), `최근 ${taDays}일 복기 자료를 복사했어요`);

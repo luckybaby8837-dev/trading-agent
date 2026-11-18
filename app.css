@@ -285,3 +285,6 @@ body.mkOpen{overflow:hidden}
 #jDraw{margin:10px 0 0 10px;vertical-align:top}
 .addPic{display:block;width:100%;margin-bottom:12px;border-style:dashed;background:none;color:var(--mut);font-weight:600}
 .addPic small{font-weight:500}
+.toolsR{display:flex;gap:6px;flex:none}
+#shotBtn{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#shotBtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
