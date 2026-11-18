@@ -13,8 +13,14 @@ const Store = (() => {
       q.onupgradeneeded = () => {
         for (const s of STORES) if (!q.result.objectStoreNames.contains(s)) q.result.createObjectStore(s, { keyPath: "id" });
       };
-      q.onsuccess = () => res(q.result);
+      q.onsuccess = () => {
+        const db = q.result;
+        // 새 버전 앱이 저장소를 바꾸려 하면, 이 (예전) 화면은 연결을 놓고 새로 고침
+        db.onversionchange = () => { db.close(); dbp = null; location.reload(); };
+        res(db);
+      };
       q.onerror = () => rej(q.error);
+      q.onblocked = () => { const t = document.getElementById("toast"); if (t) { t.textContent = "다른 창에 열린 예전 앱을 닫아 주세요"; t.hidden = false; } };
     });
     return dbp;
   }
