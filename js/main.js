@@ -810,12 +810,13 @@
         <label>거래소</label><div class="chips" id="cVen"></div>
         <div id="cTypeW"><label>무슨 돈인가요?</label><div class="chips" id="cType"></div><p class="mut sm" style="margin:6px 0 0">잘 모르겠으면 "이익+원금"을 고르세요. 출금 가능한 이익만큼은 이익, 넘는 부분은 원금으로 자동으로 나눠요.</p></div>
         <div class="row"><div><label for="cAmt" id="cAmtL">금액</label><input id="cAmt" type="number" inputmode="decimal" step="any"></div><div><label for="cDate">날짜</label><input id="cDate" type="date" value="${today()}"></div></div>
+        <div id="cRateW"><label for="cRate">그날 환율 (원/달러)</label><input id="cRate" type="number" inputmode="decimal" step="any" value="${st.fx ? st.fx.rate.toFixed(1) : ""}"></div>
         <label for="cMemo">메모</label><input id="cMemo" placeholder="예: 생활비">
       </div><div class="err" id="cErr"></div>
       <button class="primary" id="cSave" style="width:100%;min-height:50px">저장</button>`);
     $("shX").onclick = closeSheet;
     let kind = "out", venue = "bybit", type = "auto";
-    const lab = () => ($("cAmtL").textContent = venue === "upbit" ? "금액 (₩)" : "금액 ($)");
+    const lab = () => { $("cAmtL").textContent = venue === "upbit" ? "금액 (₩)" : "금액 ($)"; $("cRateW").hidden = venue === "upbit"; };
     chips($("cKind"), [["출금", "out"], ["입금", "in"]], [kind], false);
     $("cKind").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { kind = b.dataset.v; $("cTypeW").hidden = kind !== "out"; }));
     chips($("cVen"), [["바이비트", "bybit"], ["업비트", "upbit"]], [venue], false);
@@ -826,7 +827,7 @@
     $("cSave").onclick = async () => {
       const amount = +$("cAmt").value;
       if (!(amount > 0)) { $("cErr").textContent = "금액을 넣어 주세요."; return; }
-      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", rate: st.fx ? st.fx.rate : 0, type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
+      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", rate: +$("cRate").value || (st.fx ? st.fx.rate : 0), type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
       await loadData(); closeSheet(); renderCash(); renderHome(); toast(kind === "out" ? "출금을 기록했어요" : "입금을 기록했어요");
     };
   };
