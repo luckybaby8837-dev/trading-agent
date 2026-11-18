@@ -327,8 +327,13 @@
     st.trades = (await Store.all("trades")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.journal = (await Store.all("journal")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.cash = await Store.all("cash");
+    const bbDates = st.trades.filter((t) => t.src === "bybit" && t.status === "closed").map((t) => t.closeDate || t.date).sort();
+    st.bybitFrom = bbDates[0] || null;
     updatePosLines();
   }
+  // 손익 계산용: 바이비트 자동 기록이 있는 기간의 '노트에서 옮긴 바이비트 매매'는 빼고 셈 (같은 매매가 두 번 잡히지 않게)
+  const shadowed = (t) => t.src === "note" && t.venue === "bybit" && st.bybitFrom && (t.closeDate || t.date) >= st.bybitFrom;
+  const realPnl = (t) => (shadowed(t) ? null : t.pnl ?? tradePnl(t));
   // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
   function updatePosLines() { Chart.setPositions(st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit")); }
   function renderTrades() {
@@ -597,8 +602,8 @@
       const up = st.upbit[c], p = price(c), k = kimp(c);
       return `<tr><td><b>${c}</b></td><td>${up ? krw(up.price) : "—"}</td><td>${p && st.fx ? krw(p * st.fx.rate) : "—"}</td><td class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</td></tr>`;
     }).join("")}</table>`;
-    const closed = st.trades.filter((t) => t.status === "closed" && inRange(t.closeDate || t.date));
-    const sum = (v) => closed.filter((t) => t.venue === v).reduce((a, t) => a + (t.pnl ?? tradePnl(t) ?? 0), 0);
+    const closed = st.trades.filter((t) => t.status === "closed" && inRange(t.closeDate || t.date) && !shadowed(t));
+    const sum = (v) => closed.filter((t) => t.venue === v).reduce((a, t) => a + (realPnl(t) ?? 0), 0);
     const by = sum("bybit"), ub = sum("upbit"), tot = (toKrw(by, "USD") ?? 0) + ub;
     const wins = closed.filter((t) => (t.pnl ?? 0) > 0).length;
     $("pnlBody").innerHTML = `<div class="kv" style="margin-top:12px">
@@ -623,7 +628,7 @@
   const ymNow = () => today().slice(0, 7);
   function sumPnl(list) {
     let v = 0, ok = true;
-    for (const t of list) { const p = t.pnl ?? tradePnl(t); if (p == null) continue; const c = conv(p, curOf(t)); if (c == null) ok = false; else v += c; }
+    for (const t of list) { const p = realPnl(t); if (p == null) continue; const c = conv(p, curOf(t)); if (c == null) ok = false; else v += c; }
     return ok ? v : null;
   }
   function renderHero() {
@@ -721,55 +726,79 @@
   $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
 
   // ---------- 출금 (회계팀) ----------
-  // 출금·입금 기록: { kind: "out"|"in", venue, amount, cur, type: "profit"|"principal", date, memo }
-  const toKRW = (v, c) => conv(v, c, "KRW");
+  // 출금·입금 기록: { kind: "out"|"in", venue, amount, cur, rate(그때 환율), type: "profit"|"principal"|"auto", date, memo }
+  // 계산은 시크릿 노트와 같은 방식: 날짜순으로 손익·출금을 쌓으면서, "이익+원금(자동)" 출금은 그때까지 출금 가능한 이익만큼을 이익, 나머지를 원금으로 나눔
+  const toKRWr = (v, c, r) => (c === "KRW" ? v : st.fx || r ? v * (r || st.fx.rate) : null);
+  const WD_TYPE = { profit: "이익 출금", principal: "원금 출금", auto: "이익+원금 출금" };
   function cashCalc() {
-    const ym = ymNow();
-    let plAll = 0, mPl = 0, ok = true;
+    const ym = ymNow(), ev = [];
+    let ok = true;
     for (const t of st.trades.filter((x) => x.status === "closed")) {
-      const p = pnlOf(t); if (p == null) continue;
-      const k = toKRW(p, curOf(t)); if (k == null) { ok = false; continue; }
-      plAll += k; if ((t.closeDate || t.date || "").startsWith(ym)) mPl += k;
+      const p = realPnl(t); if (p == null) continue;
+      const k = toKRWr(p, curOf(t), t.rate); if (k == null) { ok = false; continue; }
+      ev.push({ d: t.closeDate || t.date || "", t: "pl", v: k });
     }
-    let profOut = 0, mOut = 0, mOutAll = 0;
-    for (const c of st.cash.filter((x) => x.kind === "out")) {
-      const k = toKRW(c.amount, c.cur); if (k == null) { ok = false; continue; }
-      if (c.type !== "principal") { profOut += k; if (c.date.startsWith(ym)) mOut += k; }
-      if (c.date.startsWith(ym)) mOutAll += k;
+    for (const c of st.cash) {
+      const k = toKRWr(c.amount, c.cur, c.rate); if (k == null) { ok = false; continue; }
+      ev.push({ d: c.date, t: c.kind, k: c.type, v: k, id: c.id });
+    }
+    ev.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : (a.t === "pl" ? 0 : 1) - (b.t === "pl" ? 0 : 1)));
+    let pl = 0, out = 0, outP = 0, inn = 0, mPl = 0, mOut = 0, mOutAll = 0, mOutP = 0, mIn = 0;
+    const split = {};
+    for (const x of ev) {
+      const m = x.d.slice(0, 7) === ym;
+      if (x.t === "pl") { pl += x.v; if (m) mPl += x.v; }
+      else if (x.t === "out") {
+        const pp = x.k === "principal" ? x.v : x.k === "auto" ? Math.max(0, x.v - Math.max(0, pl - (out - outP))) : 0;
+        out += x.v; outP += pp; split[x.id] = { profit: x.v - pp, principal: pp };
+        if (m) { mOut += x.v - pp; mOutP += pp; mOutAll += x.v; }
+      } else { inn += x.v; if (m) mIn += x.v; }
     }
     const pct = +Store.pref.get("wdPct", 50) || 50, target = +Store.pref.get("wdTarget", 0) || 0;
-    const wdb = Math.max(0, plAll - profOut);
+    const wdb = Math.max(0, pl - (out - outP));
     const sug = mPl > 0 ? Math.max(0, Math.min(wdb, mPl * pct / 100 - mOut)) : 0;
-    return { ok, plAll, mPl, profOut, mOut, mOutAll, wdb, sug, pct, target };
+    return { ok, pl, mPl, mOut, mOutP, mOutAll, mIn, wdb, sug, pct, target, split };
   }
-  // 금액(원화 기준) → 지금 표시 통화
   const fromKRW = (v) => conv(v, "KRW");
+  const FK = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
   function wdBar(c) {
-    const F = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
-    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${F(c.mOut)}</span></div>`;
+    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${FK(c.mOut)}</span></div>`;
     const r = c.mOut / c.target, p = Math.round(r * 100), done = r >= 1;
-    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${F(c.mOut)} / ${F(c.target)}` : `이번 달 이익 출금 ${F(c.mOut)} / 목표 ${F(c.target)} (${p}%)`}</span></div>`;
+    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${FK(c.mOut)} / ${FK(c.target)}` : `이번 달 이익 출금 ${FK(c.mOut)} / 목표 ${FK(c.target)} (${p}%)`}</span></div>`;
   }
   function wdSugHtml(c) {
     if (!c.ok && !st.fx) return "";
-    const x = fromKRW(c.sug);
-    if (c.sug > 0) return `<div class="wsug">이번 달 출금 추천 <b>${fmtC(x)}</b> <small>이번 달 이익의 ${c.pct}%</small></div>`;
+    if (c.sug > 0) return `<div class="wsug">이번 달 출금 추천 <b>${FK(c.sug)}</b> <small>이번 달 이익의 ${c.pct}%</small></div>`;
     if (c.mPl <= 0) return `<div class="wsug mutd">이번 달은 아직 이익이 없어서 출금 추천이 없어요</div>`;
-    return `<div class="wsug mutd">이번 달 추천만큼 이미 출금했어요</div>`;
+    return `<div class="wsug mutd">이번 달 추천만큼 이미 출금했어요 · 이번 달 이익 출금 ${FK(c.mOut)}</div>`;
   }
+  const money2 = (x) => (x.cur === "KRW" ? krw(x.amount) : usd(x.amount));
   function renderCash() {
-    const c = cashCalc(), F = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
+    const c = cashCalc();
     $("wdBody").innerHTML = wdSugHtml(c) + wdBar(c)
-      + `<div class="kv" style="margin-top:12px"><span>이번 달 실현 손익</span><b class="${sgn(c.mPl)}">${F(c.mPl)}</b>
-        <span>출금 가능 이익 <small class="mut">(누적 이익 − 이익 출금)</small></span><b>${F(c.wdb)}</b>
-        <span>이번 달 출금 (전체)</span><b>${F(c.mOutAll)}</b></div>`;
+      + `<div class="kv" style="margin-top:12px">
+        <span>이번 달 실현 손익</span><b class="${sgn(c.mPl)}">${FK(c.mPl)}</b>
+        <span>이번 달 출금</span><b>${FK(c.mOutAll)}</b>
+        <span class="ind">└ 이익</span><b>${FK(c.mOut)}</b>
+        <span class="ind">└ 원금</span><b>${FK(c.mOutP)}</b>
+        <span>이번 달 입금</span><b>${FK(c.mIn)}</b>
+        <span>출금 가능 이익 <small class="mut">(누적 이익 − 이익 출금)</small></span><b>${FK(c.wdb)}</b></div>`;
     $("wdTarget").value = c.target || ""; $("wdPct").value = Store.pref.get("wdPct", "") || "";
-    const list = st.cash.slice().sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 10);
-    $("wdList").innerHTML = list.length ? list.map((x) => `<div class="kvrow"><span><span class="badge ${x.kind === "out" ? "spot" : "open"}">${x.kind === "out" ? (x.type === "principal" ? "원금 출금" : "이익 출금") : "입금"}</span>${esc(x.date)} · ${venueName[x.venue]}${x.memo ? " · " + esc(x.memo) : ""}</span><span><b>${x.cur === "KRW" ? krw(x.amount) : usd(x.amount)}</b> <button class="sm ghost danger" data-wdel="${x.id}">삭제</button></span></div>`).join("")
-      : `<div class="empty">아직 출금·입금 기록이 없어요.</div>`;
+    // 내역: 달마다 묶어서 전부
+    const list = st.cash.slice().sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id));
+    const months = [...new Set(list.map((x) => x.date.slice(0, 7)))];
+    $("wdList").innerHTML = list.length ? months.map((m) => {
+      const xs = list.filter((x) => x.date.startsWith(m));
+      let o = 0, i = 0; for (const x of xs) { const k = toKRWr(x.amount, x.cur, x.rate) || 0; if (x.kind === "out") o += k; else i += k; }
+      return `<div class="wdm"><b>${m.replace("-", "년 ")}월</b><span>출금 ${FK(o)}${i ? ` · 입금 ${FK(i)}` : ""}</span></div>` + xs.map((x) => {
+        const sp = c.split[x.id], tag = x.kind === "out" ? WD_TYPE[x.type] || "출금" : "입금";
+        const detail = x.kind === "out" && x.type === "auto" && sp ? `<small class="mut">이익 ${FK(sp.profit)} · 원금 ${FK(sp.principal)}</small>` : "";
+        return `<div class="kvrow wdr"><span><span class="badge ${x.kind === "out" ? "spot" : "open"}">${tag}</span>${esc(x.date.slice(5))} · ${venueName[x.venue]}${x.src === "note" ? " · 노트" : ""}${x.memo ? " · " + esc(x.memo) : ""}${detail ? "<br>" + detail : ""}</span><span><b class="${x.kind === "in" ? "up" : ""}">${x.kind === "in" ? "+" : "−"}${money2(x)}</b> <button class="sm ghost danger" data-wdel="${x.id}">삭제</button></span></div>`;
+      }).join("");
+    }).join("") : `<div class="empty">아직 출금·입금 기록이 없어요.<br>노트 기록은 설정 → 데이터 → 노트 백업을 다시 불러오면 들어와요.</div>`;
     $("wdList").querySelectorAll("[data-wdel]").forEach((b) => b.onclick = async () => {
       if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더"; return; }
-      await Store.del("cash", b.dataset.wdel); await loadData(); renderCash();
+      await Store.del("cash", b.dataset.wdel); await loadData(); renderCash(); renderHome();
     });
   }
   $("wdTarget").oninput = () => { Store.pref.set("wdTarget", $("wdTarget").value); renderCash(); };
@@ -779,32 +808,32 @@
       <div class="card">
         <label>종류</label><div class="chips" id="cKind"></div>
         <label>거래소</label><div class="chips" id="cVen"></div>
-        <div id="cTypeW"><label>무슨 돈인가요?</label><div class="chips" id="cType"></div></div>
+        <div id="cTypeW"><label>무슨 돈인가요?</label><div class="chips" id="cType"></div><p class="mut sm" style="margin:6px 0 0">잘 모르겠으면 "이익+원금"을 고르세요. 출금 가능한 이익만큼은 이익, 넘는 부분은 원금으로 자동으로 나눠요.</p></div>
         <div class="row"><div><label for="cAmt" id="cAmtL">금액</label><input id="cAmt" type="number" inputmode="decimal" step="any"></div><div><label for="cDate">날짜</label><input id="cDate" type="date" value="${today()}"></div></div>
         <label for="cMemo">메모</label><input id="cMemo" placeholder="예: 생활비">
       </div><div class="err" id="cErr"></div>
       <button class="primary" id="cSave" style="width:100%;min-height:50px">저장</button>`);
     $("shX").onclick = closeSheet;
-    let kind = "out", venue = "bybit", type = "profit";
+    let kind = "out", venue = "bybit", type = "auto";
     const lab = () => ($("cAmtL").textContent = venue === "upbit" ? "금액 (₩)" : "금액 ($)");
     chips($("cKind"), [["출금", "out"], ["입금", "in"]], [kind], false);
     $("cKind").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { kind = b.dataset.v; $("cTypeW").hidden = kind !== "out"; }));
     chips($("cVen"), [["바이비트", "bybit"], ["업비트", "upbit"]], [venue], false);
     $("cVen").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { venue = b.dataset.v; lab(); }));
-    chips($("cType"), [["이익 출금", "profit"], ["원금 출금", "principal"]], [type], false);
+    chips($("cType"), [["이익+원금 (자동)", "auto"], ["이익만", "profit"], ["원금만", "principal"]], [type], false);
     $("cType").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (type = b.dataset.v)));
     lab();
     $("cSave").onclick = async () => {
       const amount = +$("cAmt").value;
       if (!(amount > 0)) { $("cErr").textContent = "금액을 넣어 주세요."; return; }
-      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
+      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", rate: st.fx ? st.fx.rate : 0, type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
       await loadData(); closeSheet(); renderCash(); renderHome(); toast(kind === "out" ? "출금을 기록했어요" : "입금을 기록했어요");
     };
   };
 
   // ---------- 팀 ----------
   const usdOf = (v, c) => (c === "USD" ? v : st.fx ? v / st.fx.rate : null);
-  const pnlOf = (t) => t.pnl ?? tradePnl(t);
+  const pnlOf = (t) => realPnl(t);
   const closedSorted = () => st.trades.filter((t) => t.status === "closed").sort((a, b) => ((b.closeDate || b.date) + (b.time || "")).localeCompare((a.closeDate || a.date) + (a.time || "")));
   const daysAgo = (n) => { const d = new Date(Date.now() - n * 864e5); return new Date(d - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 10); };
 
@@ -977,10 +1006,16 @@
     if (data && data.app === "trade-agent") return restore(data);
     const entries = (data && data.entries) || (Array.isArray(data) ? data : null);
     if (!entries) throw new Error("노트 백업이 아니에요");
-    const trades = [], journal = [], legacy = [];
+    const trades = [], journal = [], legacy = [], cash = [];
     for (const e of entries) {
       legacy.push({ id: "note_" + e.id, raw: e });
       if (e.del) continue;
+      if (e.wd) {
+        const amt = parseFloat(e.amt);
+        if (amt > 0) cash.push({ id: "note_" + e.id, src: "note", kind: e.type === "in" ? "in" : "out", venue: e.venue === "업비트" ? "upbit" : "bybit", amount: amt, cur: e.cur || "KRW", rate: +e.rate || 0,
+          type: e.type === "in" ? "" : e.kind === "p" ? "principal" : e.kind === "a" ? "auto" : "profit", date: String(e.date), memo: "" });
+        continue;
+      }
       if (e.nd) { journal.push({ id: "note_" + e.id, src: "note", kind: "diary", date: e.date, time: e.time || "", text: e.text || "", mood: [], img: e.imgPred || null }); continue; }
       if (e.wd || e.pat) continue;
       if (!e.en && !e.why) continue;
@@ -992,13 +1027,15 @@
         tf: tfMap[e.tf] || e.tf || "", date: e.date, time: "", en: +e.en || 0, qty: +e.qty || 0, sl: +e.sl || 0, tp: +e.tp || 0,
         basis: e.basis || [], why: e.why || "", mood: [], moodText: "", trend: e.dtr || "", ses: e.ses || "",
         status: closed ? "closed" : "open", exit: +e.ex || 0, pnl: isNaN(parseFloat(e.pnl)) ? null : parseFloat(e.pnl), fee: +e.fee || 0,
-        hit: e.hit || "", lesson: e.lesson || "", closeDate: e.cd || e.date, img: e.imgPred || null, imgRes: e.imgRes || null,
+        hit: e.hit || "", lesson: e.lesson || "", closeDate: e.cd || e.date, img: e.imgPred || null, imgRes: e.imgRes || null, rate: +e.rate || 0,
       });
     }
-    await Store.putMany("trades", trades); await Store.putMany("journal", journal); await Store.putMany("legacy", legacy);
+    const had = new Map((await Store.all("trades")).map((t) => [t.id, t]));
+    const merged = trades.map((t) => (had.has(t.id) ? Object.assign({}, t, had.get(t.id), { rate: t.rate }) : t));
+    await Store.putMany("trades", merged); await Store.putMany("journal", journal); await Store.putMany("legacy", legacy); await Store.putMany("cash", cash);
     if (data.seed || data.seedU) Store.pref.set("noteSeed", { bybit: data.seed, upbit: data.seedU });
     await loadData();
-    return `노트에서 매매 ${trades.length}건, 일지 ${journal.length}개를 가져왔어요.`;
+    return `노트에서 매매 ${trades.length}건, 일지 ${journal.length}개, 출금·입금 ${cash.length}건을 가져왔어요.`;
   }
   async function backup() {
     return { app: "trade-agent", v: 1, at: new Date().toISOString(), trades: await Store.all("trades"), journal: await Store.all("journal"), drawings: await Store.all("drawings"), legacy: await Store.all("legacy") };
