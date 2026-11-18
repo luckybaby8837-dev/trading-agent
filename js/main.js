@@ -750,29 +750,36 @@
     try {
       const d = $("jDate").value || today();
       const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img, imgEdit: img ? imgEdit : null });
-      await Store.put("journal", e); jEdit = e; jImg = undefined; jImgEdit = undefined;
-      await loadData(); renderJournal(true);
-      $("jMsg").textContent = "저장했어요 · " + nowHM(); toast("일지를 저장했어요");
+      const wasEdit = !!jEdit;
+      await Store.put("journal", e);
+      await loadData(); renderJournal();
+      $("jMsg").textContent = (wasEdit ? "고쳤어요 · " : "저장했어요 · ") + nowHM(); toast(wasEdit ? "일지를 고쳤어요" : "일지를 저장했어요");
     } catch (x) {
       $("jMsg").textContent = "저장하지 못했어요: " + (x && (x.message || x.name) || x);
     } finally { $("jSave").disabled = false; }
   };
   function renderJournal(keepForm) {
     const d = $("jDate").value || today();
-    const diary = st.journal.find((j) => j.kind === "diary" && j.date === d && !j.src);
-    if (!keepForm) {
-      jEdit = diary || null; jImg = undefined; jImgEdit = undefined;
-      $("jText").value = diary ? diary.text || "" : "";
-      getMood = chips($("moodChips"), MOODS, diary ? diary.mood || [] : [], true);
-      jPrev(diary && diary.img);
-      $("jMsg").textContent = "";
-    }
+    // 글칸은 늘 새 일지용으로 비워 둠. 지난 일지는 아래 목록의 '수정'으로 불러와 고침
+    const fillForm = (j) => {
+      jEdit = j || null; jImg = undefined; jImgEdit = undefined;
+      $("jText").value = j ? j.text || "" : "";
+      getMood = chips($("moodChips"), MOODS, j ? j.mood || [] : [], true);
+      jPrev(j && j.img);
+      $("jSave").textContent = j ? "고친 내용 저장" : "일지 저장";
+    };
+    if (!keepForm) { fillForm(null); $("jMsg").textContent = ""; }
     const items = [
-      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge ${j.kind === "talk" ? "open" : "spot"}">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p${j.kind === "talk" ? ' class="talkTxt"' : ""}>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge ${j.kind === "talk" ? "open" : "spot"}">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p${j.kind === "talk" ? ' class="talkTxt"' : ""}>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id, edit: j.kind === "diary" })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
-    $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 메모·매매가 없어요.</div>`;
+    $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.edit ? ` <button class="ghost sm" data-edit="${i.id}">수정</button>` : ""}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 메모·매매가 없어요.</div>`;
+    $("dayList").querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
+      fillForm(st.journal.find((x) => x.id === b.dataset.edit));
+      $("jMsg").textContent = "수정하는 중이에요 · 저장하면 이 일지가 고쳐져요";
+      $("jText").scrollIntoView({ behavior: "smooth", block: "center" }); $("jText").focus();
+    });
     $("dayList").querySelectorAll("[data-img]").forEach((im) => im.onclick = () => {
       const j = st.journal.find((x) => x.id === im.dataset.img);
       viewImg(im.src, j ? async () => { if (await editRecordImage("journal", j, "img")) renderJournal(); } : null);
