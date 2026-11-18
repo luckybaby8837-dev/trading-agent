@@ -1,6 +1,12 @@
 // 화면 동작: 차트 · 매매 · 일지 · 회계
 (() => {
   const $ = (id) => document.getElementById(id);
+  // 글칸 자동완성·자동고침 끄기 (나중에 생기는 글칸도 포함)
+  const noAuto = (root) => root.querySelectorAll && root.querySelectorAll('textarea, input:not([type]), input[type="text"], input[type="search"], input[type="number"]').forEach((el) => {
+    el.setAttribute("autocomplete", "off"); el.setAttribute("autocorrect", "off"); el.setAttribute("autocapitalize", "off"); el.spellcheck = false;
+  });
+  noAuto(document);
+  new MutationObserver((ms) => ms.forEach((m) => m.addedNodes.forEach((n) => n.nodeType === 1 && (noAuto(n), n.matches("textarea, input") && noAuto(n.parentNode))))).observe(document.body, { childList: true, subtree: true });
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
   const today = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 10); };
   const nowHM = () => new Date().toTimeString().slice(0, 5);
