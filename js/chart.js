@@ -106,7 +106,12 @@ const Chart = (() => {
       const up = css("--up-a"), dn = css("--dn-a");
       S.vol.setData(bars.map((b) => ({ time: lt(b.t), value: b.v, color: b.c >= b.o ? up : dn })));
       vis(S.vol, show.vol);
-      S.rsi.setData(ser(ind.rsi)); vis(S.rsi, show.rsi);
+      // RSI: 과매수(70 이상) 빨강, 과매도(30 이하) 파랑
+      const rHi = css("--rsi-hi"), rLo = css("--rsi-lo"), rN = css("--rsi");
+      S.rsi.setData(ser(ind.rsi).map((p) => (p.value == null ? p : { ...p, color: p.value >= 70 ? rHi : p.value <= 30 ? rLo : rN })));
+      const rv = ind.rsi[n - 1];
+      S.rsi.applyOptions({ color: rv >= 70 ? rHi : rv <= 30 ? rLo : rN });
+      vis(S.rsi, show.rsi);
     }
     sig = "";
   }
@@ -177,7 +182,7 @@ const Chart = (() => {
     for (const lv of [30, 70]) { const y = S.rsi.priceToCoordinate(lv); if (y != null) ctx.fillText(String(lv), P.w + 8, y + 4); }
     const v = ind.rsi[bars.length - 1], y = v != null ? S.rsi.priceToCoordinate(v) : null;
     if (y != null) {
-      ctx.fillStyle = css("--rsi"); ctx.fillRect(P.w + 2, y - 9, W - P.w - 4, 18);
+      ctx.fillStyle = v >= 70 ? css("--rsi-hi") : v <= 30 ? css("--rsi-lo") : css("--rsi"); ctx.fillRect(P.w + 2, y - 9, W - P.w - 4, 18);
       ctx.fillStyle = "#fff"; ctx.fillText(v.toFixed(1), P.w + 8, y + 4);
     }
   }
@@ -208,9 +213,10 @@ const Chart = (() => {
       ctx.globalAlpha = 0.5; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(P.w, y); ctx.stroke(); ctx.globalAlpha = 1;
     }
     ctx.setLineDash([]);
-    ctx.fillStyle = css("--mut"); ctx.font = "11px " + css("--mono");
+    ctx.font = "11px " + css("--mono");
     const v = ind.rsi[bars.length - 1];
-    ctx.fillText("RSI 14  " + (v != null ? v.toFixed(1) : ""), 8, P.ph + 14);
+    ctx.fillStyle = v >= 70 ? css("--rsi-hi") : v <= 30 ? css("--rsi-lo") : css("--mut");
+    ctx.fillText("RSI 14  " + (v != null ? v.toFixed(1) : "") + (v >= 70 ? "  과매수" : v <= 30 ? "  과매도" : ""), 8, P.ph + 14);
   }
 
   // ---------- 선 모양 ----------
