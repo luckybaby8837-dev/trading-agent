@@ -351,6 +351,19 @@ const Chart = (() => {
   }
 
   function setDrawings(list) { drawings = list; hoverHit = null; sig = ""; }
+  // 진행 중 포지션: 진입·손절·익절 가격선
+  let posLines = [];
+  function setPositions(list) {
+    for (const l of posLines) try { S.candle.removePriceLine(l); } catch {}
+    posLines = [];
+    const add = (price, color, title, style, w) => posLines.push(S.candle.createPriceLine({ price, color, title, lineStyle: style, lineWidth: w, axisLabelVisible: true }));
+    for (const t of list) {
+      const c = t.side === "short" ? css("--dn") : css("--up"), nm = t.side === "short" ? "숏" : "롱";
+      if (t.en) add(t.en, c, `${nm} 진입${t.qty ? " " + t.qty : ""}`, 0, 2);
+      if (t.sl) add(t.sl, css("--mut"), "손절", 2, 1);
+      if (t.tp) add(t.tp, css("--draw"), "익절", 2, 1);
+    }
+  }
   function setShow(k, v) { show[k] = v; Store.pref.set("show", show); recalc(true); }
   function setLog(v) { log = v; Store.pref.set("log", v); chart.priceScale("right").applyOptions({ mode: v ? LW.PriceScaleMode.Logarithmic : LW.PriceScaleMode.Normal }); sig = ""; }
   function retheme() {
@@ -371,7 +384,7 @@ const Chart = (() => {
     return c;
   }
   return {
-    init, setData, live, setDrawings, setTool, setShow, setLog, retheme, snapshot, valueNow, fmtP,
+    init, setData, live, setDrawings, setPositions, setTool, setShow, setLog, retheme, snapshot, valueNow, fmtP,
     get bars() { return bars; }, get ind() { return ind; }, get show() { return show; }, get log() { return log; },
     get magnet() { return magnet; }, set magnet(v) { magnet = v; },
   };

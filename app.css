@@ -182,3 +182,7 @@ body[data-v="vChart"] #topMain{display:none}
 .live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--up);margin-right:7px;vertical-align:1px;animation:livePulse 1.6s ease-in-out infinite}
 @keyframes livePulse{50%{opacity:.35}}
 @media (prefers-reduced-motion:reduce){.live{animation:none}}
+.bline{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);font-size:13px;color:var(--tx)}
+.bline span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bline.need span{color:var(--ac);font-weight:600}
+.bline button{flex:none}

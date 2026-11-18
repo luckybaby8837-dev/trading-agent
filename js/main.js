@@ -148,7 +148,16 @@
   addEventListener("resize", fitChartView); fitChartView();
   new ResizeObserver(fitChartView).observe($("topChart"));
   Chart.init($("chart"));
-  seg($("tfSeg"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), st.tf, (t) => { st.tf = t; Store.pref.set("tf", t); loadChart(); });
+  function buildTfSeg() { seg($("tfSeg"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), st.tf, (t) => { st.tf = t; Store.pref.set("tf", t); loadChart(); }); }
+  buildTfSeg();
+  function buildCoinSeg() { seg($("coinSeg"), Market.COINS.map((c) => [c, c]), st.coin, (c) => { st.coin = c; Store.pref.set("coin", c); loadChart(); renderTop(); }); }
+  async function setChart(coin, tf) {
+    if (coin === st.coin && (!tf || tf === st.tf)) return;
+    st.coin = coin; Store.pref.set("coin", coin);
+    if (tf && Market.TF[tf]) { st.tf = tf; Store.pref.set("tf", tf); }
+    buildCoinSeg(); buildTfSeg(); renderTop();
+    await loadChart();
+  }
   let curTopics = [];
   async function loadChart() {
     stopTool();
@@ -157,6 +166,7 @@
       const bars = await Market.klines(coin, tf, 1000);
       if (coin !== st.coin || tf !== st.tf) return;
       Chart.setData(coin, tf, bars);
+      updatePosLines();
       await loadDrawings();
       renderTop();
     } catch (e) { toast("시세를 불러오지 못했어요. 인터넷 연결을 확인해 주세요."); }
@@ -235,7 +245,10 @@
     stopTool();
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div><p class="mut sm">만드는 중이에요… (시간봉 5개를 함께 읽어요)</p>`);
     $("shX").onclick = closeSheet;
-    const text = await Analysis.build(st.coin, st.tf, st.drawings, price());
+    let text = await Analysis.build(st.coin, st.tf, st.drawings, price());
+    const myPos = st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit");
+    if (myPos.length) text += "\n\n[내 진행 중 포지션]\n" + myPos.map((t) => `- ${sideName[t.side]} 진입 ${Chart.fmtP(t.en)}${t.qty ? ` · ${t.qty}개` : ""}${t.sl ? ` · 손절 ${Chart.fmtP(t.sl)}` : ""}${t.tp ? ` · 익절 ${Chart.fmtP(t.tp)}` : ""} (${t.date})`
+      + `\n  근거: ${[...(t.basis || [])].join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? `\n  메모: ${t.why}` : ""}`).join("\n");
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
       <p class="mut sm" style="margin-top:0">무료 방식이에요. 아래 순서대로 복사해서 Claude 대화창에 붙여 넣으면, 내가 그린 선까지 포함해서 차트를 읽어 줘요.</p>
       <div class="steps">
@@ -276,7 +289,10 @@
   async function loadData() {
     st.trades = (await Store.all("trades")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.journal = (await Store.all("journal")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+    updatePosLines();
   }
+  // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
+  function updatePosLines() { Chart.setPositions(st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit")); }
   function renderTrades() {
     const list = st.trades.filter((t) => trFilter === "all" || t.status === trFilter);
     $("trList").innerHTML = list.length ? list.map(tradeRow).join("") : `<div class="empty">아직 기록이 없어요. <b>+ 새 매매</b>로 시작해 보세요.</div>`;
@@ -378,16 +394,48 @@
         ${t.lesson ? `<h3 style="margin-top:14px">청산 후 생각</h3><p style="white-space:pre-wrap;margin:0">${esc(t.lesson)}</p>` : ""}</div>
       ${t.img ? `<div class="card"><h3>진입 때 차트</h3><img class="pic" src="${t.img}" alt="진입 때 차트"></div>` : ""}
       ${t.imgRes ? `<div class="card"><h3>결과 차트</h3><img class="pic" src="${t.imgRes}" alt="결과 차트"></div>` : ""}
-      <div class="row wrap">${t.status === "open" ? '<button class="primary" id="dClose">청산 기록</button>' : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
+      <div class="row wrap">${t.status === "open" ? `${t.src === "bybit" ? "" : '<button id="dClose">청산 기록</button>'}<button class="primary" id="dBasis">근거 적기</button>` : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
     $("shX").onclick = closeSheet;
     $("dEdit").onclick = () => tradeForm(t);
     if ($("dClose")) $("dClose").onclick = () => closeForm(t);
+    if ($("dBasis")) $("dBasis").onclick = () => basisForm(t.id);
     if ($("dReopen")) $("dReopen").onclick = async () => { Object.assign(t, { status: "open", exit: 0, pnl: null, hit: "" }); await Store.put("trades", t); await loadData(); tradeDetail(t.id); renderTrades(); };
     $("dDel").onclick = async (e) => {
       if (e.target.dataset.s !== "1") { e.target.dataset.s = "1"; e.target.textContent = "한 번 더 누르면 삭제"; return; }
       await Store.del("trades", t.id); await loadData(); closeSheet(); renderTrades(); toast("삭제했어요");
     };
   }
+  // 진입 근거 빠른 입력 (칩 · 시간봉 · 한 줄 메모 · 심리 · 차트 그림)
+  function basisForm(id) {
+    const t = st.trades.find((x) => x.id === id); if (!t) return;
+    const chartOk = t.venue !== "upbit" && Market.COINS.includes(t.coin);
+    sheet(`<div class="sh"><h2><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span>${esc(t.coin)} 진입 근거</h2><button class="ghost" id="shX">닫기</button></div>
+      <div class="card">
+        <div class="mut sm">진입 ${t.en ? Chart.fmtP(t.en) : "—"}${t.qty ? ` · ${t.qty}개` : ""}${t.sl ? ` · 손절 ${Chart.fmtP(t.sl)}` : ""}${t.tp ? ` · 익절 ${Chart.fmtP(t.tp)}` : ""}</div>
+        <label>근거</label><div class="chips" id="bBasis"></div>
+        <label>기준 시간봉</label><div class="chips" id="bTf"></div>
+        <label for="bWhy">한 줄 메모</label><textarea id="bWhy" rows="2" placeholder="예: 4시간 채널 하단 + RSI 다이버전스">${esc(t.why || "")}</textarea>
+        <label>지금 심리</label><div class="chips" id="bMood"></div>
+        ${chartOk ? `<label class="chk" style="display:flex;gap:8px;align-items:center;color:var(--tx);font-weight:500"><input type="checkbox" id="bSnap" checked style="width:18px;min-height:0">차트 그림 같이 저장 (그린 선 · 진입선 포함)</label>` : ""}
+      </div>
+      <button class="primary" id="bSave" style="width:100%;min-height:50px">저장</button>`);
+    $("shX").onclick = closeSheet;
+    const getB = chips($("bBasis"), BASIS.concat((t.basis || []).filter((b) => !BASIS.includes(b))), t.basis || [], true);
+    let tf = t.tf || st.tf;
+    chips($("bTf"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), [tf], false);
+    $("bTf").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (tf = b.dataset.v)));
+    const getM = chips($("bMood"), MOODS, t.mood || [], true);
+    $("bSave").onclick = async () => {
+      $("bSave").disabled = true; $("bSave").textContent = "저장하는 중…";
+      Object.assign(t, { basis: getB(), tf, why: $("bWhy").value.trim(), mood: getM() });
+      if (chartOk && $("bSnap").checked) {
+        await setChart(t.coin, tf);
+        t.img = (await chartShot()) || t.img || null;
+      }
+      await Store.put("trades", t); await loadData(); closeSheet(); renderHome(); renderTrades(); toast("진입 근거를 저장했어요");
+    };
+  }
+
   function closeForm(t) {
     sheet(`<div class="sh"><h2>청산 기록</h2><button class="ghost" id="shX">닫기</button></div>
       <div class="card">
@@ -546,12 +594,7 @@
     if ($("hSet")) $("hSet").onclick = () => showView("vSet");
     $("curSym").textContent = sym;
   }
-  function pickCoin(c) {
-    if (st.coin === c) return;
-    st.coin = c; Store.pref.set("coin", c);
-    seg($("coinSeg"), Market.COINS.map((x) => [x, x]), st.coin, (x) => { st.coin = x; Store.pref.set("coin", x); loadChart(); renderTop(); });
-    loadChart(); renderTop();
-  }
+  function pickCoin(c) { setChart(c); }
   function renderTicks() {
     $("hTick").innerHTML = Market.COINS.map((c) => {
       const t = st.tick[c] || {}, p = price(c), k = kimp(c);
@@ -564,9 +607,14 @@
     const td = new Date(today()).getTime();
     $("hOpen").innerHTML = open.length ? open.map((t) => {
       const days = Math.max(1, Math.round((td - new Date(t.date).getTime()) / 864e5) + 1);
-      return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `);
+      const has = (t.basis && t.basis.length) || t.why;
+      const line = has
+        ? `<div class="bline"><span>${esc([...(t.basis || []), t.why].filter(Boolean).join(" · "))}</span><button class="sm ghost" data-b="${t.id}">수정</button></div>`
+        : `<div class="bline need"><span>근거 미입력</span><button class="sm primary" data-b="${t.id}">근거 적기</button></div>`;
+      return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `).replace(/<\/div>\s*$/, line + "</div>");
     }).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
     $("hOpen").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+    $("hOpen").querySelectorAll("[data-b]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); basisForm(b.dataset.b); });
   }
   function renderHome() {
     $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
