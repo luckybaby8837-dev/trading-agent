@@ -112,7 +112,7 @@
     scrollTo(0, 0);
     if (v === "vChart") fitChartView();
     if (v === "vHome") renderHome();
-    if (v === "vSet") renderSet();
+    if (v === "vSet") { renderSet(); if (!Upbit.local) ubView(Upbit.status, { local: false }); }
     if (v === "vTeam") renderTeamList();
     if (v === "vTChart") renderTChart();
     if (v === "vTTrend") renderTTrend();
@@ -329,10 +329,17 @@
     st.cash = await Store.all("cash");
     const bbDates = st.trades.filter((t) => t.src === "bybit" && t.status === "closed").map((t) => t.closeDate || t.date).sort();
     st.bybitFrom = bbDates[0] || null;
+    const ubDates = st.trades.filter((t) => t.src === "upbit" && t.status === "closed").map((t) => t.closeDate || t.date).sort();
+    st.upbitFrom = ubDates[0] || null;
+    st.upSnap = (await Store.get("legacy", "upbit_snapshot")) || null;
     updatePosLines();
   }
   // 손익 계산용: 바이비트 자동 기록이 있는 기간의 '노트에서 옮긴 바이비트 매매'는 빼고 셈 (같은 매매가 두 번 잡히지 않게)
-  const shadowed = (t) => t.src === "note" && t.venue === "bybit" && st.bybitFrom && (t.closeDate || t.date) >= st.bybitFrom;
+  const shadowed = (t) => {
+    if (t.src !== "note") return false;
+    const from = t.venue === "upbit" ? st.upbitFrom : st.bybitFrom;
+    return !!from && (t.closeDate || t.date) >= from;
+  };
   const realPnl = (t) => (shadowed(t) ? null : t.pnl ?? tradePnl(t));
   // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
   function updatePosLines() { Chart.setPositions(st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit")); }
@@ -346,7 +353,7 @@
     const pnl = t.status === "open" ? (lp ? tradePnl(t, lp) : null) : (t.pnl ?? tradePnl(t));
     const pct = t.status === "open" && lp && t.en ? ((lp / t.en - 1) * 100 * (t.side === "short" ? -1 : 1)) : null;
     return `<div class="item" data-id="${t.id}">
-      <div class="l1"><div><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> <span class="mut sm">${venueName[t.venue]}${t.src === "bybit" ? " 자동" : ""} ·${esc(Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf || "")}</span>${t.status === "open" ? ' <span class="badge open">진행 중</span>' : t.hit ? ` <span class="badge spot">${esc(t.hit)}</span>` : ""}</div>
+      <div class="l1"><div><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> <span class="mut sm">${venueName[t.venue]}${t.src === "bybit" || t.src === "upbit" ? " 자동" : ""} ·${esc(Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf || "")}</span>${t.status === "open" ? ' <span class="badge open">진행 중</span>' : t.hit ? ` <span class="badge spot">${esc(t.hit)}</span>` : ""}</div>
       <b class="num ${sgn(pnl || 0)}">${pnl == null ? "—" : money(pnl, cur)}</b></div>
       <div class="l2"><span>${esc(t.date)} ${esc(t.time || "")} · 진입 ${t.en ? Chart.fmtP(t.en) : "—"}${t.exit ? " → " + Chart.fmtP(t.exit) : ""}</span><span>${pct != null ? `<b class="${sgn(pct)}">${pctS(pct)}</b>` : esc((t.basis || []).slice(0, 3).join(" · "))}</span></div>
     </div>`;
@@ -437,7 +444,7 @@
         ${t.lesson ? `<h3 style="margin-top:14px">청산 후 생각</h3><p style="white-space:pre-wrap;margin:0">${esc(t.lesson)}</p>` : ""}</div>
       ${t.img ? `<div class="card"><h3>진입 때 차트</h3><img class="pic" src="${t.img}" alt="진입 때 차트"></div>` : ""}
       ${t.imgRes ? `<div class="card"><h3>결과 차트</h3><img class="pic" src="${t.imgRes}" alt="결과 차트"></div>` : ""}
-      <div class="row wrap">${t.status === "open" ? `${t.src === "bybit" ? "" : '<button id="dClose">청산 기록</button>'}<button class="primary" id="dBasis">근거 적기</button>` : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
+      <div class="row wrap">${t.status === "open" ? `${t.src === "bybit" || t.src === "upbit" ? "" : '<button id="dClose">청산 기록</button>'}<button class="primary" id="dBasis">근거 적기</button>` : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
     $("shX").onclick = closeSheet;
     $("dEdit").onclick = () => tradeForm(t);
     if ($("dClose")) $("dClose").onclick = () => closeForm(t);
@@ -631,16 +638,24 @@
     for (const t of list) { const p = realPnl(t); if (p == null) continue; const c = conv(p, curOf(t)); if (c == null) ok = false; else v += c; }
     return ok ? v : null;
   }
+  // 업비트 자산 = 원화 + 코인 수량 × 지금 업비트 가격 (PC가 남긴 잔고 기록으로 계산, 폰에서도 보임)
+  function upbitEquity() {
+    const s = st.upSnap; if (!s) return null;
+    let v = s.krw || 0;
+    for (const [c, a] of Object.entries(s.coins || {})) v += a.qty * ((st.upbit[c] && st.upbit[c].price) || a.avg || 0);
+    return Math.round(v);
+  }
   function renderHero() {
     const closed = st.trades.filter((t) => t.status === "closed");
     const mPl = sumPnl(closed.filter((t) => (t.closeDate || t.date || "").startsWith(ymNow()))), pl = sumPnl(closed);
-    let un = 0;
-    for (const t of st.trades.filter((x) => x.status === "open")) { const lp = livePrice(t), p = lp ? tradePnl(t, lp) : null, c = p == null ? null : conv(p, curOf(t)); if (c != null) un += c; }
-    const bbAuto = Bybit.equity, bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = +Store.pref.get("asUpbit", 0) || 0;
+    let un = 0, unB = 0, unU = 0;
+    for (const t of st.trades.filter((x) => x.status === "open")) { const lp = livePrice(t), p = lp ? tradePnl(t, lp) : null, c = p == null ? null : conv(p, curOf(t)); if (c != null) { un += c; if (t.venue === "upbit") unU += c; else unB += c; } }
+    const ubAuto = upbitEquity();
+    const bbAuto = Bybit.equity, bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = ubAuto != null ? ubAuto : +Store.pref.get("asUpbit", 0) || 0;
     const eqU = bb ? conv(bb, "USD") : 0, eqK = ub ? conv(ub, "KRW") : 0, has = !!(bb || ub);
     const eq = has && eqU != null && eqK != null ? eqU + eqK : null;
     // 바이비트 자동 잔고에는 미실현이 이미 들어 있음. 손으로 넣은 값엔 더해 줌
-    const eqShow = eq == null ? null : eq + (bbAuto ? 0 : un);
+    const eqShow = eq == null ? null : eq + (bbAuto ? 0 : unB) + (ubAuto != null ? 0 : unU);
     const base = eqShow == null ? 0 : eqShow - un;
     const pc = (x, b) => (eqShow != null && b > 0 ? `${x >= 0 ? "+" : "−"}${Math.abs(x / b * 100).toFixed(1)}%` : "");
     const sym = cur === "KRW" ? "₩" : "$";
@@ -649,7 +664,7 @@
       + (eqShow == null
         ? `<div class="hv empty">${has ? "환율을 불러오는 중…" : "자산을 아직 몰라요"}</div>${has ? "" : `<button class="primary" id="hSet">설정에서 바이비트 연결 · 자산 입력</button>`}`
         : `<div class="hv"><span class="cs">${eqShow < 0 ? "-" : ""}${sym}</span>${num(eqShow)}</div>`
-          + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b></span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
+          + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b>${ubAuto != null ? " · 자동" : ""}</span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
       + `<div class="hrow"><div><span>이번 달</span><b class="${sgn(mPl || 0)}">${mPl == null ? "—" : sgC(mPl)}</b><small class="${sgn(mPl || 0)}">${mPl == null ? "" : pc(mPl, base - mPl)}</small></div>`
       + `<div><span>누적</span><b class="${sgn(pl || 0)}">${pl == null ? "—" : sgC(pl)}</b><small class="${sgn(pl || 0)}">${pl == null ? "" : pc(pl, base - pl)}</small></div></div>`;
     { const c = cashCalc(); $("hHero").insertAdjacentHTML("beforeend", wdSugHtml(c) + (c.target > 0 ? wdBar(c) : "")); }
@@ -688,6 +703,7 @@
     const a = Bybit.equity;
     $("asBybit").value = a ? a.v.toFixed(2) : Store.pref.get("asBybit", "") || "";
     $("asBybit").disabled = !!a;
+    const u = upbitEquity(); if (u != null) { $("asUpbit").value = u; $("asUpbit").disabled = true; } else $("asUpbit").disabled = false;
     $("asUpbit").value = Store.pref.get("asUpbit", "") || "";
     renderFontPick();
   }
@@ -1126,6 +1142,44 @@
     $("bbErr").textContent = s.err || "";
   }
   Bybit.init(bbView, refreshViews);
+
+  // ---------- 업비트 연결 (집 PC) ----------
+  function ubView(s, x) {
+    const box = $("ubBody");
+    if (!x.local) {
+      const snap = st.upSnap;
+      box.innerHTML = `<p class="mut sm" style="margin:0">업비트는 등록한 IP(집 PC)에서만 연결돼요. 집 PC에서 <b>앱실행.bat</b>로 앱을 켜 두면, 매매·입출금·잔고가 자동으로 들어와 여기에도 보여요.</p>
+        <p style="margin:10px 0 0"><b class="${snap && Date.now() - snap.at < 3600e3 ? "up" : ""}">● ${snap ? "마지막으로 받은 시각 " + new Date(snap.at).toLocaleString("ko-KR", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }) : "아직 PC에서 받은 기록이 없어요"}</b></p>`;
+      $("ubMsg").textContent = ""; $("ubErr").textContent = ""; return;
+    }
+    if (!x.server) {
+      box.innerHTML = `<p class="mut sm" style="margin:0">업비트를 연결하려면 앱을 <b>앱실행.bat</b>로 다시 켜 주세요. (새 PC 서버가 필요해요)</p>`;
+    } else if (!x.configured) {
+      if (!$("ubKey")) {
+        box.innerHTML = `<p class="mut sm" style="margin-top:0">업비트 Open API의 <b>조회 전용</b> 열쇠를 넣어 주세요. 열쇠는 이 PC 파일에만 저장되고 폰·인터넷으로 올라가지 않아요.</p>
+          <label for="ubKey">Access Key</label><input id="ubKey" autocomplete="off" spellcheck="false">
+          <label for="ubSec">Secret Key</label><input id="ubSec" type="password" autocomplete="off" spellcheck="false">
+          <div class="row"><button class="primary" id="ubGo">연결</button></div>`;
+        $("ubGo").onclick = async () => {
+          $("ubGo").disabled = true; $("ubErr").textContent = "";
+          try { const n = await Upbit.connect($("ubKey").value, $("ubSec").value); toast(`업비트 연결됨 · ${n}건 반영`); await refreshViews(); }
+          catch (e) { $("ubErr").textContent = e.message; }
+          finally { if ($("ubGo")) $("ubGo").disabled = false; }
+        };
+      }
+    } else {
+      box.innerHTML = `<p style="margin-top:0"><b class="up">● 연결됨</b> <span class="mut sm">5분마다 자동으로 읽어요 (최근 1년)</span></p>
+        <div class="row wrap"><button id="ubNow">지금 새로 읽기</button><button class="danger" id="ubOff">연결 끊기</button></div>`;
+      $("ubNow").onclick = () => Upbit.sync().then((n) => toast(n ? `${n}건 반영했어요` : "새 기록이 없어요")).catch(() => {});
+      $("ubOff").onclick = (e) => {
+        if (e.target.dataset.s !== "1") { e.target.dataset.s = "1"; e.target.textContent = "한 번 더 누르면 끊기 (기록은 남아요)"; return; }
+        Upbit.disconnect();
+      };
+    }
+    $("ubMsg").textContent = s.msg || (s.at ? "마지막 확인 " + new Date(s.at).toTimeString().slice(0, 5) : "");
+    $("ubErr").textContent = s.err || "";
+  }
+  Upbit.init(ubView, refreshViews);
 
   // ---------- 시작 ----------
   (async () => {
