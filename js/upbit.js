@@ -7,6 +7,7 @@
 const Upbit = (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const DAYS = 365, WIN = 7 * 864e5;
+  const FROM = "2026-10-01"; // 이 날짜 이전 업비트 매매·입출금은 앱에 넣지 않음 (사용자 요청). 평균 매수가 계산엔 그대로 씀
   let server = false, configured = false, busy = false, timer = 0;
   let status = { msg: "", err: "", at: 0 };
   let onStatus = () => {}, onData = () => {};
@@ -98,6 +99,7 @@ const Upbit = (() => {
         const used = Math.min(p.qty, vol);
         p.cost -= p.qty > 0 ? (p.cost / p.qty) * used : 0; p.qty -= used;
         if (!avg) continue;
+        if (kst(o.created_at)[0] < FROM) continue;
         const [d, tm] = kst(o.created_at), id = "ub_" + o.uuid, old = byId.get(id), posRec = byId.get("ubpos_" + coin);
         const rec = { id, src: "upbit", venue: "upbit", coin, side: "buy", status: "closed", en: Math.round(avg * 100) / 100, exit: Math.round(funds / vol * 100) / 100, qty: vol,
           pnl: Math.round(funds - fee - avg * vol), fee: Math.round(fee), closeDate: d, approx };
@@ -123,11 +125,15 @@ const Upbit = (() => {
       for (const [kind, list] of [["in", await cashList("deposits")], ["out", await cashList("withdraws")]]) {
         for (const x of list) {
           const id = `ub_${kind === "in" ? "d" : "w"}_${x.uuid}`, [d] = kst(x.done_at || x.created_at);
+          if (d < FROM) continue;
           const rec = { id, src: "upbit", kind, venue: "upbit", amount: +x.amount, cur: "KRW", rate: 0, type: kind === "out" ? "auto" : "", date: d, memo: "업비트 자동" };
           const old = cash.get(id);
           if (!old) { await Store.put("cash", rec); n++; } else if (!same(Object.assign({}, old, rec), old)) { await Store.put("cash", Object.assign(old, rec)); n++; }
         }
       }
+      // 기준일 이전 업비트 자동 기록은 지움 (동기화로 폰에서도 지워짐)
+      for (const t of all) if (t.src === "upbit" && t.status === "closed" && (t.closeDate || t.date || "") < FROM) { await Store.del("trades", t.id); n++; }
+      for (const c of await Store.all("cash")) if (c.src === "upbit" && (c.date || "") < FROM) { await Store.del("cash", c.id); n++; }
       // 홈 자산용 잔고 (폰에서도 보이게 기록으로 남김)
       const snap = { id: "upbit_snapshot", krw: Math.round(krw), coins: Object.fromEntries(Object.entries(acc).filter(([, a]) => a.qty > 0).map(([c, a]) => [c, { qty: a.qty, avg: a.avg }])), at: Date.now() };
       const oldSnap = await Store.get("legacy", "upbit_snapshot");
