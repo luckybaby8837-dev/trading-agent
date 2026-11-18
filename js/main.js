@@ -930,7 +930,7 @@
         ? `<div class="bline"><span>${esc([...(t.basis || []), t.why].filter(Boolean).join(" · "))}</span><button class="sm ghost" data-b="${t.id}">수정</button></div>`
         : `<div class="bline need"><span>근거 미입력</span><button class="sm primary" data-b="${t.id}">근거 적기</button></div>`;
       const notes = (t.notes || []).slice(-2);
-      const pn = `<div class="pnote">${notes.map((n) => noteLine(n, t.id)).join("")}<div class="pnRow"><input class="pnIn" data-n="${t.id}" placeholder="지금 이 포지션에 대한 생각" enterkeyhint="done"><button class="sm primary" data-ns="${t.id}">남기기</button></div></div>`;
+      const pn = `<div class="pnote">${notes.map((n) => noteLine(n, t.id)).join("")}<div class="pnRow"><textarea class="pnIn" rows="1" data-n="${t.id}" placeholder="지금 이 포지션에 대한 생각" enterkeyhint="done" autocomplete="off" spellcheck="false"></textarea><button class="sm primary" data-ns="${t.id}">남기기</button></div></div>`;
       return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `).replace(/<\/div>\s*$/, line + pn + "</div>");
     }).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
     $("hOpen").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
@@ -939,7 +939,10 @@
     const send = async (id) => { const inp = $("hOpen").querySelector(`.pnIn[data-n="${id}"]`), v = inp.value.trim(); if (!v) return; inp.value = ""; inp.blur(); await addNote(id, v); renderOpen(); };
     $("hOpen").querySelectorAll("[data-ns]").forEach((b) => b.onclick = () => send(b.dataset.ns));
     $("hOpen").querySelectorAll("[data-nd]").forEach((b) => b.onclick = async () => { if (await delNote(b.dataset.nd, b.dataset.at)) renderOpen(); });
-    $("hOpen").querySelectorAll(".pnIn").forEach((inp) => inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(inp.dataset.n); } });
+    $("hOpen").querySelectorAll(".pnIn").forEach((inp) => {
+      inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(inp.dataset.n); } };
+      inp.oninput = () => { inp.style.height = "auto"; inp.style.height = inp.scrollHeight + 2 + "px"; };
+    });
   }
   function renderHome() {
     $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
