@@ -112,6 +112,17 @@
     </div>
     <div class="card"><h3>김치 프리미엄</h3><div id="kpTable"></div></div>
     <div class="card"><h3>진행 중 포지션</h3><div id="openBody"></div></div>
+    <div class="card" id="wdCard">
+      <h3>출금</h3>
+      <div id="wdBody"></div>
+      <div class="row">
+        <div><label for="wdTarget">월 출금 목표 (₩)</label><input id="wdTarget" type="number" inputmode="decimal" step="any" placeholder="예: 1000000"></div>
+        <div><label for="wdPct">추천 비율 (%)</label><input id="wdPct" type="number" inputmode="decimal" step="any" placeholder="50"></div>
+      </div>
+      <p class="mut sm" style="margin:6px 0 0">추천 = 이번 달 실현 이익 × 추천 비율 − 이번 달 이미 뺀 이익 (출금 가능 이익 안에서)</p>
+      <button class="primary" id="wdAdd" style="width:100%;margin-top:12px">+ 출금 · 입금 기록</button>
+      <div id="wdList" style="margin-top:10px"></div>
+    </div>
   </section>
 
   <!-- 일지 -->

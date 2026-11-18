@@ -14,7 +14,7 @@
 
   const st = {
     coin: Store.pref.get("coin", "BTC"), tf: Store.pref.get("tf", "4h"),
-    tick: {}, upbit: {}, fx: null, trades: [], journal: [], drawings: [],
+    tick: {}, upbit: {}, fx: null, trades: [], journal: [], drawings: [], cash: [],
   };
 
   // ---------- 공통 UI ----------
@@ -326,6 +326,7 @@
   async function loadData() {
     st.trades = (await Store.all("trades")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.journal = (await Store.all("journal")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+    st.cash = await Store.all("cash");
     updatePosLines();
   }
   // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
@@ -586,6 +587,7 @@
     return true;
   }
   function renderAcct() {
+    if ($("wdBody")) renderCash();
     $("aFx").textContent = st.fx ? "₩" + st.fx.rate.toFixed(2) : "—";
     $("aFxNote").textContent = st.fx ? "기준 " + new Date(st.fx.at).toLocaleDateString("ko-KR") + " · 하루 한 번 갱신" : "불러오는 중";
     const u = st.upbit.USDT;
@@ -645,6 +647,7 @@
           + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b></span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
       + `<div class="hrow"><div><span>이번 달</span><b class="${sgn(mPl || 0)}">${mPl == null ? "—" : sgC(mPl)}</b><small class="${sgn(mPl || 0)}">${mPl == null ? "" : pc(mPl, base - mPl)}</small></div>`
       + `<div><span>누적</span><b class="${sgn(pl || 0)}">${pl == null ? "—" : sgC(pl)}</b><small class="${sgn(pl || 0)}">${pl == null ? "" : pc(pl, base - pl)}</small></div></div>`;
+    { const c = cashCalc(); $("hHero").insertAdjacentHTML("beforeend", wdSugHtml(c) + (c.target > 0 ? wdBar(c) : "")); }
     if ($("hSet")) $("hSet").onclick = () => showView("vSet");
     $("curSym").textContent = sym;
   }
@@ -716,6 +719,88 @@
 
   $("asBybit").oninput =() => Store.pref.set("asBybit", $("asBybit").value);
   $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
+
+  // ---------- 출금 (회계팀) ----------
+  // 출금·입금 기록: { kind: "out"|"in", venue, amount, cur, type: "profit"|"principal", date, memo }
+  const toKRW = (v, c) => conv(v, c, "KRW");
+  function cashCalc() {
+    const ym = ymNow();
+    let plAll = 0, mPl = 0, ok = true;
+    for (const t of st.trades.filter((x) => x.status === "closed")) {
+      const p = pnlOf(t); if (p == null) continue;
+      const k = toKRW(p, curOf(t)); if (k == null) { ok = false; continue; }
+      plAll += k; if ((t.closeDate || t.date || "").startsWith(ym)) mPl += k;
+    }
+    let profOut = 0, mOut = 0, mOutAll = 0;
+    for (const c of st.cash.filter((x) => x.kind === "out")) {
+      const k = toKRW(c.amount, c.cur); if (k == null) { ok = false; continue; }
+      if (c.type !== "principal") { profOut += k; if (c.date.startsWith(ym)) mOut += k; }
+      if (c.date.startsWith(ym)) mOutAll += k;
+    }
+    const pct = +Store.pref.get("wdPct", 50) || 50, target = +Store.pref.get("wdTarget", 0) || 0;
+    const wdb = Math.max(0, plAll - profOut);
+    const sug = mPl > 0 ? Math.max(0, Math.min(wdb, mPl * pct / 100 - mOut)) : 0;
+    return { ok, plAll, mPl, profOut, mOut, mOutAll, wdb, sug, pct, target };
+  }
+  // 금액(원화 기준) → 지금 표시 통화
+  const fromKRW = (v) => conv(v, "KRW");
+  function wdBar(c) {
+    const F = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
+    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${F(c.mOut)}</span></div>`;
+    const r = c.mOut / c.target, p = Math.round(r * 100), done = r >= 1;
+    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${F(c.mOut)} / ${F(c.target)}` : `이번 달 이익 출금 ${F(c.mOut)} / 목표 ${F(c.target)} (${p}%)`}</span></div>`;
+  }
+  function wdSugHtml(c) {
+    if (!c.ok && !st.fx) return "";
+    const x = fromKRW(c.sug);
+    if (c.sug > 0) return `<div class="wsug">이번 달 출금 추천 <b>${fmtC(x)}</b> <small>이번 달 이익의 ${c.pct}%</small></div>`;
+    if (c.mPl <= 0) return `<div class="wsug mutd">이번 달은 아직 이익이 없어서 출금 추천이 없어요</div>`;
+    return `<div class="wsug mutd">이번 달 추천만큼 이미 출금했어요</div>`;
+  }
+  function renderCash() {
+    const c = cashCalc(), F = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
+    $("wdBody").innerHTML = wdSugHtml(c) + wdBar(c)
+      + `<div class="kv" style="margin-top:12px"><span>이번 달 실현 손익</span><b class="${sgn(c.mPl)}">${F(c.mPl)}</b>
+        <span>출금 가능 이익 <small class="mut">(누적 이익 − 이익 출금)</small></span><b>${F(c.wdb)}</b>
+        <span>이번 달 출금 (전체)</span><b>${F(c.mOutAll)}</b></div>`;
+    $("wdTarget").value = c.target || ""; $("wdPct").value = Store.pref.get("wdPct", "") || "";
+    const list = st.cash.slice().sort((a, b) => (b.date + b.id).localeCompare(a.date + a.id)).slice(0, 10);
+    $("wdList").innerHTML = list.length ? list.map((x) => `<div class="kvrow"><span><span class="badge ${x.kind === "out" ? "spot" : "open"}">${x.kind === "out" ? (x.type === "principal" ? "원금 출금" : "이익 출금") : "입금"}</span>${esc(x.date)} · ${venueName[x.venue]}${x.memo ? " · " + esc(x.memo) : ""}</span><span><b>${x.cur === "KRW" ? krw(x.amount) : usd(x.amount)}</b> <button class="sm ghost danger" data-wdel="${x.id}">삭제</button></span></div>`).join("")
+      : `<div class="empty">아직 출금·입금 기록이 없어요.</div>`;
+    $("wdList").querySelectorAll("[data-wdel]").forEach((b) => b.onclick = async () => {
+      if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더"; return; }
+      await Store.del("cash", b.dataset.wdel); await loadData(); renderCash();
+    });
+  }
+  $("wdTarget").oninput = () => { Store.pref.set("wdTarget", $("wdTarget").value); renderCash(); };
+  $("wdPct").oninput = () => { Store.pref.set("wdPct", $("wdPct").value); renderCash(); };
+  $("wdAdd").onclick = () => {
+    sheet(`<div class="sh"><h2>출금 · 입금 기록</h2><button class="ghost" id="shX">닫기</button></div>
+      <div class="card">
+        <label>종류</label><div class="chips" id="cKind"></div>
+        <label>거래소</label><div class="chips" id="cVen"></div>
+        <div id="cTypeW"><label>무슨 돈인가요?</label><div class="chips" id="cType"></div></div>
+        <div class="row"><div><label for="cAmt" id="cAmtL">금액</label><input id="cAmt" type="number" inputmode="decimal" step="any"></div><div><label for="cDate">날짜</label><input id="cDate" type="date" value="${today()}"></div></div>
+        <label for="cMemo">메모</label><input id="cMemo" placeholder="예: 생활비">
+      </div><div class="err" id="cErr"></div>
+      <button class="primary" id="cSave" style="width:100%;min-height:50px">저장</button>`);
+    $("shX").onclick = closeSheet;
+    let kind = "out", venue = "bybit", type = "profit";
+    const lab = () => ($("cAmtL").textContent = venue === "upbit" ? "금액 (₩)" : "금액 ($)");
+    chips($("cKind"), [["출금", "out"], ["입금", "in"]], [kind], false);
+    $("cKind").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { kind = b.dataset.v; $("cTypeW").hidden = kind !== "out"; }));
+    chips($("cVen"), [["바이비트", "bybit"], ["업비트", "upbit"]], [venue], false);
+    $("cVen").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { venue = b.dataset.v; lab(); }));
+    chips($("cType"), [["이익 출금", "profit"], ["원금 출금", "principal"]], [type], false);
+    $("cType").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (type = b.dataset.v)));
+    lab();
+    $("cSave").onclick = async () => {
+      const amount = +$("cAmt").value;
+      if (!(amount > 0)) { $("cErr").textContent = "금액을 넣어 주세요."; return; }
+      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
+      await loadData(); closeSheet(); renderCash(); renderHome(); toast(kind === "out" ? "출금을 기록했어요" : "입금을 기록했어요");
+    };
+  };
 
   // ---------- 팀 ----------
   const usdOf = (v, c) => (c === "USD" ? v : st.fx ? v / st.fx.rate : null);

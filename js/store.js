@@ -1,7 +1,7 @@
 // 저장소: 기기 안(IndexedDB)에 모든 기록 보관. 바뀐 내용은 동기화 모듈(sync.js)에 알려 줌.
 const Store = (() => {
-  const DBN = "trade-agent", VER = 1;
-  const STORES = ["trades", "journal", "memos", "drawings", "legacy"];
+  const DBN = "trade-agent", VER = 2;
+  const STORES = ["trades", "journal", "memos", "drawings", "legacy", "cash"];
   let dbp = null;
   const subs = [];
   const emit = (store, op, v) => { for (const f of subs) try { f(store, op, v); } catch {} };
