@@ -494,10 +494,16 @@
   $("jSave").onclick = async () => {
     const text = $("jText").value.trim(), mood = getMood();
     if (!text && !mood.length && !jImg) { $("jMsg").textContent = "내용을 적어 주세요."; return; }
-    const d = $("jDate").value || today();
-    const e = Object.assign(jEdit || { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img: jImg || (jEdit && jEdit.img) || null });
-    await Store.put("journal", e); jEdit = e;
-    $("jMsg").textContent = "저장했어요 · " + nowHM(); await loadData(); renderJournal(true);
+    $("jSave").disabled = true; $("jMsg").textContent = "저장하는 중…";
+    try {
+      const d = $("jDate").value || today();
+      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img: jImg || (jEdit && jEdit.date === d && jEdit.img) || null });
+      await Store.put("journal", e); jEdit = e; jImg = null;
+      await loadData(); renderJournal(true);
+      $("jMsg").textContent = "저장했어요 · " + nowHM(); toast("일지를 저장했어요");
+    } catch (x) {
+      $("jMsg").textContent = "저장하지 못했어요: " + (x && (x.message || x.name) || x);
+    } finally { $("jSave").disabled = false; }
   };
   function renderJournal(keepForm) {
     const d = $("jDate").value || today();
@@ -510,7 +516,7 @@
       $("jMsg").textContent = "";
     }
     const items = [
-      ...st.journal.filter((j) => j.date === d && j !== diary).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="pic" src="${j.img}" alt="">` : ""}`, id: j.id })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="pic" src="${j.img}" alt="">` : ""}`, id: j.id })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
@@ -639,11 +645,11 @@
   }
   // 숫자 글꼴 고르기
   const FONTS = [
-    { k: "plex", name: "IBM Plex Sans KR", note: "시크릿 노트와 같은 글꼴", css: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap", fam: '"IBM Plex Sans KR"' },
-    { k: "noto", name: "Noto Sans KR", note: "구글 기본 고딕", css: "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap", fam: '"Noto Sans KR"' },
-    { k: "nanum", name: "나눔고딕", note: "둥글고 넓은 숫자", css: "https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap", fam: '"Nanum Gothic"' },
-    { k: "roboto", name: "Roboto", note: "안드로이드 기본 숫자", css: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap", fam: "Roboto" },
-    { k: "pretendard", name: "Pretendard", note: "지금 앱 글자", css: null, fam: '"Pretendard"' },
+    { k: "plex", short: "IBM Plex", name: "IBM Plex Sans KR", note: "시크릿 노트와 같은 글꼴", css: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap", fam: '"IBM Plex Sans KR"' },
+    { k: "noto", short: "Noto", name: "Noto Sans KR", note: "구글 기본 고딕", css: "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap", fam: '"Noto Sans KR"' },
+    { k: "nanum", short: "나눔고딕", name: "나눔고딕", note: "둥글고 넓은 숫자", css: "https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap", fam: '"Nanum Gothic"' },
+    { k: "roboto", short: "Roboto", name: "Roboto", note: "안드로이드 기본 숫자", css: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap", fam: "Roboto" },
+    { k: "pretendard", short: "Pretendard", name: "Pretendard", note: "지금 앱 글자", css: null, fam: '"Pretendard"' },
   ];
   const loaded = new Set();
   function loadFont(f) {
@@ -661,8 +667,11 @@
   let numFont = applyFont(Store.pref.get("numFont", "plex"));
   function renderFontPick() {
     FONTS.forEach(loadFont);
-    $("fontPick").innerHTML = FONTS.map((f) => `<button class="fp${f.k === numFont ? " on" : ""}" data-k="${f.k}"><span class="fpn">${f.name} <small>${f.note}</small></span><b style="font-family:${f.fam.replace(/"/g, "&quot;")},sans-serif">64,184.2 · $2,246.58 · +1.54%</b></button>`).join("");
-    $("fontPick").querySelectorAll(".fp").forEach((b) => b.onclick = () => { numFont = applyFont(b.dataset.k); Store.pref.set("numFont", numFont); renderFontPick(); toast(FONTS.find((x) => x.k === numFont).name + "(으)로 바꿨어요"); });
+    const ff = (f) => f.fam.replace(/"/g, "&quot;") + ",sans-serif";
+    const curF = FONTS.find((x) => x.k === numFont) || FONTS[0];
+    $("fontPick").innerHTML = `<div class="chips">${FONTS.map((f) => `<button class="${f.k === numFont ? "on" : ""}" data-k="${f.k}" style="font-family:${ff(f)}">${f.short}</button>`).join("")}</div>
+      <div class="fpv" style="font-family:${ff(curF)}">$2,246.58 · +1.54%</div>`;
+    $("fontPick").querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { numFont = applyFont(b.dataset.k); Store.pref.set("numFont", numFont); renderFontPick(); });
   }
 
   $("asBybit").oninput =() => Store.pref.set("asBybit", $("asBybit").value);

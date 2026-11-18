@@ -219,3 +219,4 @@ body[data-v="vChart"] #topMain{display:none}
 .fpn{font-size:12.5px;color:var(--mut);font-weight:600}.fpn small{font-weight:500;margin-left:4px}
 .fp.on .fpn{color:var(--ac)}
 .fp b{font-size:19px;font-weight:600;color:var(--tx);font-variant-numeric:tabular-nums}
+.fpv{margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--card2);font-size:20px;font-weight:600;font-variant-numeric:tabular-nums}
