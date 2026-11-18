@@ -479,7 +479,15 @@
 
   // ---------- 일지 ----------
   $("jDate").value = today();
-  let getMood = chips($("moodChips"), MOODS, [], true), jImg = null, jEdit = null;
+  let getMood = chips($("moodChips"), MOODS, [], true), jImg, jEdit = null;
+  function jPrev(src) {
+    $("jImgPrev").innerHTML = src ? `<div class="thumbW"><img class="thumb" src="${src}" alt="첨부 사진"><button type="button" class="thumbX" aria-label="사진 지우기">✕</button></div>` : "";
+    if (!src) return;
+    $("jImgPrev").querySelector(".thumb").onclick = () => viewImg(src);
+    $("jImgPrev").querySelector(".thumbX").onclick = () => { jImg = null; jPrev(null); $("jMsg").textContent = "사진을 뺐어요. 일지 저장을 눌러야 반영돼요."; };
+  }
+  // 사진 크게 보기
+  function viewImg(src) { sheet(`<div class="sh"><h2>사진</h2><button class="ghost" id="shX">닫기</button></div><img class="pic" src="${src}" alt="사진">`); $("shX").onclick = closeSheet; }
   const memoTa = $("memoText");
   memoTa.addEventListener("input", () => { memoTa.style.height = "auto"; memoTa.style.height = memoTa.scrollHeight + "px"; });
   $("memoSave").onclick = async () => {
@@ -489,16 +497,18 @@
     await loadData(); renderJournal();
   };
   $("jImgBtn").onclick = () => $("jImg").click();
-  $("jImg").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; jImg = await shrink(f); $("jImgPrev").innerHTML = `<img class="pic" src="${jImg}" alt="첨부 사진">`; e.target.value = ""; };
+  $("jImg").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; jImg = await shrink(f); jPrev(jImg); e.target.value = ""; };
   $("jDate").onchange = () => { jEdit = null; renderJournal(); };
   $("jSave").onclick = async () => {
     const text = $("jText").value.trim(), mood = getMood();
-    if (!text && !mood.length && !jImg) { $("jMsg").textContent = "내용을 적어 주세요."; return; }
+    const d0 = $("jDate").value || today(), same = jEdit && jEdit.date === d0;
+    const img = jImg === undefined ? (same && jEdit.img) || null : jImg;
+    if (!text && !mood.length && !img) { $("jMsg").textContent = "내용을 적어 주세요."; return; }
     $("jSave").disabled = true; $("jMsg").textContent = "저장하는 중…";
     try {
       const d = $("jDate").value || today();
-      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img: jImg || (jEdit && jEdit.date === d && jEdit.img) || null });
-      await Store.put("journal", e); jEdit = e; jImg = null;
+      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img });
+      await Store.put("journal", e); jEdit = e; jImg = undefined;
       await loadData(); renderJournal(true);
       $("jMsg").textContent = "저장했어요 · " + nowHM(); toast("일지를 저장했어요");
     } catch (x) {
@@ -509,18 +519,19 @@
     const d = $("jDate").value || today();
     const diary = st.journal.find((j) => j.kind === "diary" && j.date === d && !j.src);
     if (!keepForm) {
-      jEdit = diary || null; jImg = null;
+      jEdit = diary || null; jImg = undefined;
       $("jText").value = diary ? diary.text || "" : "";
       getMood = chips($("moodChips"), MOODS, diary ? diary.mood || [] : [], true);
-      $("jImgPrev").innerHTML = diary && diary.img ? `<img class="pic" src="${diary.img}" alt="첨부 사진">` : "";
+      jPrev(diary && diary.img);
       $("jMsg").textContent = "";
     }
     const items = [
-      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="pic" src="${j.img}" alt="">` : ""}`, id: j.id })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
     $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 메모·매매가 없어요.</div>`;
+    $("dayList").querySelectorAll("[data-img]").forEach((im) => im.onclick = () => viewImg(im.src));
     $("dayList").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
       if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더 누르면 삭제"; return; }
       await Store.del("journal", b.dataset.del); await loadData(); renderJournal(true);
