@@ -203,7 +203,32 @@ const Chart = (() => {
       ctx.beginPath(); ctx.moveTo(p.x, p.ya); ctx.lineTo(q.x, q.ya); ctx.lineTo(q.x, q.yb); ctx.lineTo(p.x, p.yb); ctx.closePath(); ctx.fill();
     }
   }
+  // RSI 과매수(70 위) 빨강 · 과매도(30 아래) 파랑 면적 (투명도 30%)
+  function rsiFill(P) {
+    const r = ind.rsi, ts = chart.timeScale(), pts = [];
+    for (let i = 0; i < r.length; i++) {
+      if (r[i] == null) continue;
+      const x = ts.logicalToCoordinate(i);
+      if (x == null || x < -20 || x > P.w + 20) continue;
+      pts.push([x, S.rsi.priceToCoordinate(r[i])]);
+    }
+    if (pts.length < 2) return;
+    const y70 = S.rsi.priceToCoordinate(70), y30 = S.rsi.priceToCoordinate(30);
+    if (y70 == null || y30 == null) return;
+    const area = (yBase, clipTop, clipBot, color) => {
+      ctx.save();
+      ctx.beginPath(); ctx.rect(0, clipTop, P.w, clipBot - clipTop); ctx.clip();
+      ctx.beginPath(); ctx.moveTo(pts[0][0], yBase);
+      for (const [x, y] of pts) ctx.lineTo(x, y);
+      ctx.lineTo(pts[pts.length - 1][0], yBase); ctx.closePath();
+      ctx.globalAlpha = 0.3; ctx.fillStyle = color; ctx.fill();
+      ctx.restore();
+    };
+    area(y70, P.ph, y70, css("--rsi-hi"));
+    area(y30, y30, P.h, css("--rsi-lo"));
+  }
   function rsiGuides(P) {
+    rsiFill(P);
     ctx.strokeStyle = css("--bd"); ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(0, P.ph + 0.5); ctx.lineTo(P.w, P.ph + 0.5); ctx.stroke();
     ctx.setLineDash([3, 4]); ctx.strokeStyle = css("--mut");

@@ -261,7 +261,7 @@
     activeTool = t; step = 0; buildTools(); hint();
     Chart.setTool(t, async (r) => {
       if (r.add) {
-        const d = { id: Store.uid("d"), coin: st.coin, ...r.add };
+        const d = { id: Store.uid("d"), coin: st.coin, tf: st.tf, ...r.add };
         await Store.put("drawings", d); await loadDrawings();
         toast("선을 저장했어요"); stopTool();
       } else if (r.erase) {
@@ -271,8 +271,17 @@
   }
   function stepCount() { if (activeTool && activeTool !== "erase") { step++; hint(); } }
   function stopTool() { activeTool = null; step = 0; Chart.setTool(null); buildTools(); hint(); }
+  // 선은 그린 시간봉과 그보다 작은 시간봉에서만 보임 (15분봉에 그린 채널이 주봉에서 한 캔들 안에 뭉개지지 않게)
+  // 예전에 그린 선(시간봉 기록 없음)은, 지금 시간봉 캔들 2개보다 짧으면 숨김
+  const TF_ORDER = ["15m", "1h", "4h", "1d", "1w"];
+  function showOnTf(d, tf) {
+    if (d.type === "hline") return true;
+    if (d.tf) return TF_ORDER.indexOf(tf) <= TF_ORDER.indexOf(d.tf);
+    const ts = [d.a, d.b, d.c].filter(Boolean).map((p) => p.t);
+    return Math.max(...ts) - Math.min(...ts) >= 2 * Market.TF[tf].ms;
+  }
   async function loadDrawings() {
-    st.drawings = (await Store.all("drawings")).filter((d) => d.coin === st.coin).sort((a, b) => a.u - b.u);
+    st.drawings = (await Store.all("drawings")).filter((d) => d.coin === st.coin && showOnTf(d, st.tf)).sort((a, b) => a.u - b.u);
     Chart.setDrawings(st.drawings);
   }
   buildTools();
