@@ -635,8 +635,37 @@
     $("asBybit").value = a ? a.v.toFixed(2) : Store.pref.get("asBybit", "") || "";
     $("asBybit").disabled = !!a;
     $("asUpbit").value = Store.pref.get("asUpbit", "") || "";
+    renderFontPick();
   }
-  $("asBybit").oninput = () => Store.pref.set("asBybit", $("asBybit").value);
+  // 숫자 글꼴 고르기
+  const FONTS = [
+    { k: "plex", name: "IBM Plex Sans KR", note: "시크릿 노트와 같은 글꼴", css: "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap", fam: '"IBM Plex Sans KR"' },
+    { k: "noto", name: "Noto Sans KR", note: "구글 기본 고딕", css: "https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap", fam: '"Noto Sans KR"' },
+    { k: "nanum", name: "나눔고딕", note: "둥글고 넓은 숫자", css: "https://fonts.googleapis.com/css2?family=Nanum+Gothic:wght@400;700;800&display=swap", fam: '"Nanum Gothic"' },
+    { k: "roboto", name: "Roboto", note: "안드로이드 기본 숫자", css: "https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap", fam: "Roboto" },
+    { k: "pretendard", name: "Pretendard", note: "지금 앱 글자", css: null, fam: '"Pretendard"' },
+  ];
+  const loaded = new Set();
+  function loadFont(f) {
+    if (!f.css || loaded.has(f.k)) return;
+    loaded.add(f.k);
+    const l = document.createElement("link"); l.rel = "stylesheet"; l.href = f.css; document.head.appendChild(l);
+  }
+  function applyFont(k) {
+    const f = FONTS.find((x) => x.k === k) || FONTS[0];
+    loadFont(f);
+    document.documentElement.style.setProperty("--mono", `${f.fam},"Pretendard",system-ui,sans-serif`);
+    if (document.fonts) document.fonts.ready.then(() => Chart.retheme());
+    return f.k;
+  }
+  let numFont = applyFont(Store.pref.get("numFont", "plex"));
+  function renderFontPick() {
+    FONTS.forEach(loadFont);
+    $("fontPick").innerHTML = FONTS.map((f) => `<button class="fp${f.k === numFont ? " on" : ""}" data-k="${f.k}"><span class="fpn">${f.name} <small>${f.note}</small></span><b style="font-family:${f.fam.replace(/"/g, "&quot;")},sans-serif">64,184.2 · $2,246.58 · +1.54%</b></button>`).join("");
+    $("fontPick").querySelectorAll(".fp").forEach((b) => b.onclick = () => { numFont = applyFont(b.dataset.k); Store.pref.set("numFont", numFont); renderFontPick(); toast(FONTS.find((x) => x.k === numFont).name + "(으)로 바꿨어요"); });
+  }
+
+  $("asBybit").oninput =() => Store.pref.set("asBybit", $("asBybit").value);
   $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
 
   // ---------- 팀 ----------
