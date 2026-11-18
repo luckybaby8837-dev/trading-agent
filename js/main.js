@@ -79,14 +79,24 @@
   }
 
   // ---------- 탭 ----------
+  let lastTab = "vHome";
+  function showView(v) {
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === v));
+    document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
+    document.body.dataset.v = v;
+    scrollTo(0, 0);
+    if (v === "vChart") fitChartView();
+    if (v === "vHome") renderHome();
+    if (v === "vSet") renderSet();
+    if (v !== "vChart") stopTool();
+  }
+  $("setBtn").onclick = () => showView("vSet");
+  $("setX").onclick = () => showView(lastTab);
   document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
-    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b));
-    document.querySelectorAll(".view").forEach((v) => v.classList.toggle("on", v.id === b.dataset.v));
-    Store.pref.set("view", b.dataset.v);
+    lastTab = b.dataset.v; showView(b.dataset.v);
     if (b.dataset.v === "vTrade") renderTrades();
     if (b.dataset.v === "vJournal") renderJournal();
     if (b.dataset.v === "vAcct") renderAcct();
-    if (b.dataset.v !== "vChart") stopTool();
   });
 
   // ---------- 상단 시세 ----------
@@ -96,7 +106,7 @@
     if (d.lastPrice) o.last = +d.lastPrice;
     if (d.price24hPcnt) o.chg = +d.price24hPcnt * 100;
     if (sym === st.coin) renderTop();
-    liveDot();
+    liveDot(); homeSoon();
   });
   Market.on("kline", (sym, iv, k) => { Chart.live(sym, iv, k); liveDot(); });
   let dotT = 0;
@@ -120,7 +130,7 @@
   }
   async function pollUpbit() {
     if (document.hidden) return;
-    try { st.upbit = await Market.upbit(); renderTop(); if ($("vAcct").classList.contains("on")) renderAcct(); } catch {}
+    try { st.upbit = await Market.upbit(); renderTop(); if ($("vAcct").classList.contains("on")) renderAcct(); homeSoon(); } catch {}
   }
   async function loadFx() {
     const f = await Market.usdkrw();
@@ -131,11 +141,12 @@
   // ---------- 차트 ----------
   // 차트 화면 높이를 상단·하단 막대 크기에 맞춰 정확히 채움
   function fitChartView() {
-    const h = innerHeight - document.querySelector(".top").offsetHeight - document.querySelector(".tabs").offsetHeight - 10;
+    if (!$("vChart").classList.contains("on")) return;
+    const h = innerHeight - $("topChart").offsetHeight - document.querySelector(".tabs").offsetHeight - 10;
     $("vChart").style.height = Math.max(380, h) + "px";
   }
   addEventListener("resize", fitChartView); fitChartView();
-  new ResizeObserver(fitChartView).observe(document.querySelector(".top"));
+  new ResizeObserver(fitChartView).observe($("topChart"));
   Chart.init($("chart"));
   seg($("tfSeg"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), st.tf, (t) => { st.tf = t; Store.pref.set("tf", t); loadChart(); });
   let curTopics = [];
@@ -499,6 +510,79 @@
     }).join("")}</table>` : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
   }
 
+  // ---------- 홈 ----------
+  let cur = Store.pref.get("cur", "USD");
+  const fmtC = (v, c = cur) => (c === "KRW" ? krw(v) : usd(v));
+  const sgC = (v, c = cur) => (v > 0 ? "+" : "") + fmtC(v, c);
+  const conv = (v, from, to = cur) => { if (from === to) return v; if (!st.fx) return null; return from === "USD" ? v * st.fx.rate : v / st.fx.rate; };
+  $("curBtn").onclick = () => { cur = cur === "USD" ? "KRW" : "USD"; Store.pref.set("cur", cur); renderHome(); };
+  const ymNow = () => today().slice(0, 7);
+  function sumPnl(list) {
+    let v = 0, ok = true;
+    for (const t of list) { const p = t.pnl ?? tradePnl(t); if (p == null) continue; const c = conv(p, curOf(t)); if (c == null) ok = false; else v += c; }
+    return ok ? v : null;
+  }
+  function renderHero() {
+    const closed = st.trades.filter((t) => t.status === "closed");
+    const mPl = sumPnl(closed.filter((t) => (t.closeDate || t.date || "").startsWith(ymNow()))), pl = sumPnl(closed);
+    let un = 0;
+    for (const t of st.trades.filter((x) => x.status === "open")) { const lp = livePrice(t), p = lp ? tradePnl(t, lp) : null, c = p == null ? null : conv(p, curOf(t)); if (c != null) un += c; }
+    const bbAuto = Bybit.equity, bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = +Store.pref.get("asUpbit", 0) || 0;
+    const eqU = bb ? conv(bb, "USD") : 0, eqK = ub ? conv(ub, "KRW") : 0, has = !!(bb || ub);
+    const eq = has && eqU != null && eqK != null ? eqU + eqK : null;
+    // 바이비트 자동 잔고에는 미실현이 이미 들어 있음. 손으로 넣은 값엔 더해 줌
+    const eqShow = eq == null ? null : eq + (bbAuto ? 0 : un);
+    const base = eqShow == null ? 0 : eqShow - un;
+    const pc = (x, b) => (b > 0 ? `${x >= 0 ? "+" : "−"}${Math.abs(x / b * 100).toFixed(1)}%` : "");
+    const sym = cur === "KRW" ? "₩" : "$";
+    const num = (v) => fmtC(Math.abs(v)).slice(1);
+    $("hHero").innerHTML = `<div class="hl">현재 자산</div>`
+      + (eqShow == null
+        ? `<div class="hv empty">${has ? "환율을 불러오는 중…" : "자산을 아직 몰라요"}</div>${has ? "" : `<button class="primary" id="hSet">설정에서 바이비트 연결 · 자산 입력</button>`}`
+        : `<div class="hv"><span class="cs">${eqShow < 0 ? "-" : ""}${sym}</span>${num(eqShow)}</div>`
+          + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b></span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
+      + `<div class="hrow"><div><span>이번 달</span><b class="${sgn(mPl || 0)}">${mPl == null ? "—" : sgC(mPl)}</b><small class="${sgn(mPl || 0)}">${mPl == null ? "" : pc(mPl, base - mPl)}</small></div>`
+      + `<div><span>누적</span><b class="${sgn(pl || 0)}">${pl == null ? "—" : sgC(pl)}</b><small class="${sgn(pl || 0)}">${pl == null ? "" : pc(pl, base - pl)}</small></div></div>`;
+    if ($("hSet")) $("hSet").onclick = () => showView("vSet");
+    $("curSym").textContent = sym;
+  }
+  function pickCoin(c) {
+    if (st.coin === c) return;
+    st.coin = c; Store.pref.set("coin", c);
+    seg($("coinSeg"), Market.COINS.map((x) => [x, x]), st.coin, (x) => { st.coin = x; Store.pref.set("coin", x); loadChart(); renderTop(); });
+    loadChart(); renderTop();
+  }
+  function renderTicks() {
+    $("hTick").innerHTML = Market.COINS.map((c) => {
+      const t = st.tick[c] || {}, p = price(c), k = kimp(c);
+      return `<button class="tick" data-c="${c}"><span class="t1">${c}<span class="chg ${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</span></span><b>${p ? Chart.fmtP(p) : "—"}</b><small>김프 <span class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</span></small></button>`;
+    }).join("");
+    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); lastTab = "vChart"; showView("vChart"); });
+  }
+  function renderOpen() {
+    const open = st.trades.filter((t) => t.status === "open");
+    const td = new Date(today()).getTime();
+    $("hOpen").innerHTML = open.length ? open.map((t) => {
+      const days = Math.max(1, Math.round((td - new Date(t.date).getTime()) / 864e5) + 1);
+      return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `);
+    }).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
+    $("hOpen").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+  }
+  function renderHome() {
+    $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
+    renderHero(); renderTicks(); renderOpen();
+  }
+  let hT = 0;
+  function homeSoon() { if (hT || !$("vHome").classList.contains("on") || document.hidden) return; hT = setTimeout(() => { hT = 0; renderHero(); renderTicks(); }, 1000); }
+  function renderSet() {
+    const a = Bybit.equity;
+    $("asBybit").value = a ? a.v.toFixed(2) : Store.pref.get("asBybit", "") || "";
+    $("asBybit").disabled = !!a;
+    $("asUpbit").value = Store.pref.get("asUpbit", "") || "";
+  }
+  $("asBybit").oninput = () => Store.pref.set("asBybit", $("asBybit").value);
+  $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
+
   // ---------- 노트 가져오기 · 백업 ----------
   async function importNote(json) {
     let data; try { data = typeof json === "string" ? JSON.parse(json) : json; } catch { throw new Error("형식이 맞지 않아요"); }
@@ -561,6 +645,7 @@
   // ---------- 폰·PC 동기화 ----------
   Sync.init(async () => {
     await loadData(); await loadDrawings();
+    if ($("vHome").classList.contains("on")) renderHome();
     if ($("vTrade").classList.contains("on")) renderTrades();
     if ($("vJournal").classList.contains("on")) renderJournal(true);
     if ($("vAcct").classList.contains("on")) renderAcct();
@@ -577,6 +662,7 @@
   // ---------- 바이비트 연결 ----------
   const refreshViews = async () => {
     await loadData();
+    if ($("vHome").classList.contains("on")) renderHome();
     if ($("vTrade").classList.contains("on")) renderTrades();
     if ($("vJournal").classList.contains("on")) renderJournal(true);
     if ($("vAcct").classList.contains("on")) renderAcct();
@@ -617,14 +703,13 @@
 
   // ---------- 시작 ----------
   (async () => {
-    const v = Store.pref.get("view", "vChart");
-    const btn = document.querySelector(`.tabs button[data-v="${v}"]`);
+    document.body.dataset.v = "vHome";
     await loadData();
-    if (btn && v !== "vChart") btn.click();
+    renderHome();
     loadFx(); setInterval(loadFx, 6 * 3600e3);
     pollUpbit(); setInterval(pollUpbit, 4000);
     await loadChart();
-    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); }, 3000);
+    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) renderOpen(); }, 3000);
   })();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => Chart.retheme());
   if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});

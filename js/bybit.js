@@ -60,6 +60,25 @@ const Bybit = (() => {
     return (r.list || []).filter((p) => +p.size > 0);
   }
 
+  // 지갑 잔고(USD, 미실현 포함). 통합계정 → 안 되면 선물계정
+  let equity = Store.pref.get("bybitEq", null);
+  async function wallet() {
+    let v = null;
+    for (const accountType of ["UNIFIED", "CONTRACT"]) {
+      try {
+        const r = await get("/v5/account/wallet-balance", { accountType });
+        const a = (r.list || [])[0];
+        if (!a) continue;
+        v = +a.totalEquity || (a.coin || []).reduce((s, c) => s + (+c.usdValue || (c.coin === "USDT" ? +c.equity : 0) || 0), 0);
+        if (v) break;
+      } catch {}
+    }
+    if (v == null) return false;
+    const changed = !equity || Math.abs(equity.v - v) > 0.005;
+    equity = { v, at: Date.now() }; Store.pref.set("bybitEq", equity);
+    return changed;
+  }
+
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   async function save(rec, old) { if (old && same(Object.assign({}, old, rec), old)) return false; await Store.put("trades", Object.assign(old || {}, rec)); return true; }
 
@@ -101,8 +120,9 @@ const Bybit = (() => {
       }
       for (const t of all) if (t.id.startsWith("bbpos_") && !live.has(t.id)) { await Store.del("trades", t.id); n++; }
       Store.pref.set(LAST, Date.now() + offset);
+      const eqChanged = await wallet();
       set({ msg: "", err: "", at: Date.now() });
-      if (n) onData();
+      if (n || eqChanged) onData();
       return n;
     } catch (e) { set({ err: e.message }); throw e; }
     finally { busy = false; }
@@ -145,7 +165,7 @@ const Bybit = (() => {
     connectWs();
     return refresh(Date.now() - 30 * 864e5);
   }
-  function disconnect() { keys = null; Store.pref.set(KEYS, null); closeWs(); set({ msg: "", err: "" }); }
+  function disconnect() { keys = null; Store.pref.set(KEYS, null); equity = null; Store.pref.set("bybitEq", null); closeWs(); set({ msg: "", err: "" }); }
 
   function init(statusCb, dataCb) {
     onStatus = statusCb; onData = dataCb;
@@ -156,5 +176,5 @@ const Bybit = (() => {
     setInterval(() => { if (!document.hidden && keys) refresh(Date.now() - 2 * 864e5).catch(() => {}); }, 5 * 60e3);
     document.addEventListener("visibilitychange", () => { if (!document.hidden && keys) { if (!wsOn) connectWs(); soon(); } });
   }
-  return { init, connect, disconnect, refresh, get on() { return !!keys; }, get live() { return wsOn; }, get status() { return status; } };
+  return { init, connect, disconnect, refresh, get on() { return !!keys; }, get equity() { return keys ? equity : null; }, get live() { return wsOn; }, get status() { return status; } };
 })();

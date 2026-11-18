@@ -142,3 +142,43 @@ tr:last-child td{border-bottom:0}
 .toast{position:fixed;left:50%;bottom:calc(var(--tab) + 20px + env(safe-area-inset-bottom));transform:translateX(-50%);z-index:60;background:var(--tx);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;font-weight:600;box-shadow:var(--shadow);max-width:90vw}
 .err{color:var(--up);font-size:13px;margin-top:8px}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* 홈 구조: 차트 탭에서만 시세 머리줄, 나머지는 제목 머리줄 */
+body:not([data-v="vChart"]) #topChart{display:none}
+body[data-v="vChart"] #topMain{display:none}
+.top.home{border-bottom:0;gap:10px}
+.top.home .ttl{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.top.home h1{margin:0;font-size:18px;font-weight:700;letter-spacing:-.02em;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top.home small{font-size:12px;color:var(--mut);font-weight:500}
+.iconbtn{width:40px;height:40px;min-height:0;padding:0;display:grid;place-items:center;background:var(--card);border-radius:12px;color:var(--mut);flex:none}
+.iconbtn svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.iconbtn.wide{width:auto;padding:0 12px;display:flex;gap:5px;align-items:center;color:var(--tx)}
+.iconbtn.wide svg{width:15px;height:15px}
+.iconbtn.wide b{font-size:16px;font-weight:700;min-width:12px;text-align:center}
+
+.hero{padding:20px 20px 16px;cursor:default}
+.hl{font-size:12.5px;color:var(--mut);font-weight:600}
+.hv{font-family:var(--mono);font-size:34px;font-weight:600;letter-spacing:-.04em;line-height:1.2;margin-top:2px;font-variant-numeric:tabular-nums}
+.hv .cs{font-size:.58em;margin-right:3px;color:var(--mut)}
+.hv.empty{font-family:var(--font);font-size:20px;letter-spacing:-.02em;padding:0;text-align:left;color:var(--mut)}
+.hsub{font-size:12.5px;color:var(--mut);margin-top:4px;display:flex;gap:14px;flex-wrap:wrap}
+.hsub b{color:var(--tx);font-family:var(--mono);font-weight:600}
+.hrow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px;padding-top:12px;border-top:1px solid var(--bd)}
+.hrow>div{display:flex;flex-direction:column;gap:1px;min-width:0}
+.hrow span{font-size:12px;color:var(--mut);font-weight:600}
+.hrow b{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-.02em}
+.hrow small{font-family:var(--mono);font-size:12px;font-weight:600}
+.hero .primary{width:100%;margin-top:12px}
+
+.ticks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.tick{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:11px 13px;box-shadow:var(--shadow);cursor:pointer;display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left;font-weight:400}
+.tick .t1{display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:var(--mut)}
+.tick b{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-.03em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tick small{font-size:12px;color:var(--mut);font-family:var(--mono)}
+.tick .chg{font-size:11.5px;padding:1px 6px}
+.lk{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.lk a{display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;padding:0 8px;background:var(--card);border:1px solid var(--bd);border-radius:12px;color:var(--tx);font-size:13.5px;font-weight:600;text-decoration:none;box-shadow:var(--shadow);white-space:nowrap}
+.lk a small{color:var(--mut);font-weight:600;font-size:12px}
+.live{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--up);margin-right:7px;vertical-align:1px;animation:livePulse 1.6s ease-in-out infinite}
+@keyframes livePulse{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.live{animation:none}}

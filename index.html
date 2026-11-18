@@ -14,7 +14,12 @@
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header class="top">
+<header class="top home" id="topMain">
+  <div class="ttl"><h1>트레이딩 에이전트</h1><small id="topDate"></small></div>
+  <button class="iconbtn wide" id="curBtn" aria-label="표시 통화 바꾸기 (달러/원화)"><svg viewBox="0 0 24 24"><path d="M7 4l-4 4 4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></svg><b id="curSym">$</b></button>
+  <button class="iconbtn" id="setBtn" aria-label="설정"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+</header>
+<header class="top chartTop" id="topChart">
   <div class="seg coin" id="coinSeg"></div>
   <div class="px">
     <b id="pxMain">—</b>
@@ -25,8 +30,31 @@
 </header>
 
 <main>
+  <!-- 홈 -->
+  <section id="vHome" class="view on">
+    <div class="card hero" id="hHero"></div>
+    <div class="ticks" id="hTick"></div>
+    <div class="lk">
+      <a href="https://www.tradingview.com/chart/?symbol=BYBIT%3ABTCUSDT.P" target="_blank" rel="noopener">트레이딩뷰 <small>BTC</small></a>
+      <a href="https://www.tradingview.com/chart/?symbol=BYBIT%3AETHUSDT.P" target="_blank" rel="noopener">트레이딩뷰 <small>ETH</small></a>
+    </div>
+    <div class="card memo">
+      <textarea id="memoText" rows="1" placeholder="지금 드는 생각을 바로 적어 보세요"></textarea>
+      <div class="memoRow"><span class="mut sm" id="memoMsg"></span><button class="primary sm" id="memoSave">메모 저장</button></div>
+    </div>
+    <div class="head"><h2>진행 중 포지션</h2></div>
+    <div id="hOpen"></div>
+  </section>
+
+  <!-- 매매 -->
+  <section id="vTrade" class="view">
+    <div class="head"><h2>매매 기록</h2><button class="primary sm" id="newTrade">+ 새 매매</button></div>
+    <div class="seg filter" id="trFilter"></div>
+    <div id="trList"></div>
+  </section>
+
   <!-- 차트 -->
-  <section id="vChart" class="view on">
+  <section id="vChart" class="view">
     <div class="bar">
       <div class="seg tf" id="tfSeg"></div>
       <button class="ghost" id="indBtn" aria-haspopup="true">지표</button>
@@ -39,20 +67,20 @@
     </div>
   </section>
 
-  <!-- 매매 -->
-  <section id="vTrade" class="view">
-    <div class="head"><h2>매매 기록</h2><button class="primary" id="newTrade">+ 새 매매</button></div>
-    <div class="seg filter" id="trFilter"></div>
-    <div id="trList"></div>
+  <!-- 손익 -->
+  <section id="vAcct" class="view">
+    <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
+    <div class="grid2">
+      <div class="card stat"><span>달러 환율</span><b id="aFx">—</b><small id="aFxNote" class="mut"></small></div>
+      <div class="card stat"><span>업비트 테더(USDT)</span><b id="aUsdt">—</b><small id="aUsdtNote" class="mut"></small></div>
+    </div>
+    <div class="card"><h3>김치 프리미엄</h3><div id="kpTable"></div></div>
+    <div class="card"><h3>진행 중 포지션</h3><div id="openBody"></div></div>
   </section>
 
   <!-- 일지 -->
   <section id="vJournal" class="view">
-    <div class="card memo">
-      <textarea id="memoText" rows="1" placeholder="지금 드는 생각을 바로 적어 두세요"></textarea>
-      <div class="memoRow"><span class="mut sm" id="memoMsg"></span><button class="primary sm" id="memoSave">메모 저장</button></div>
-    </div>
-    <div class="head"><h2>오늘의 일지</h2><input type="date" id="jDate"></div>
+    <div class="head" style="margin-top:6px"><h2>오늘의 일지</h2><input type="date" id="jDate"></div>
     <div class="card" id="diaryCard">
       <label>심리 상태</label>
       <div class="chips" id="moodChips"></div>
@@ -72,15 +100,17 @@
     <div id="pastList"></div>
   </section>
 
-  <!-- 회계 -->
-  <section id="vAcct" class="view">
-    <div class="grid2">
-      <div class="card stat"><span>달러 환율</span><b id="aFx">—</b><small id="aFxNote" class="mut"></small></div>
-      <div class="card stat"><span>업비트 테더(USDT)</span><b id="aUsdt">—</b><small id="aUsdtNote" class="mut"></small></div>
+  <!-- 설정 (오른쪽 위 ⚙) -->
+  <section id="vSet" class="view">
+    <div class="head" style="margin-top:6px"><h2>설정</h2><button class="sm" id="setX">닫기</button></div>
+    <div class="card">
+      <h3>자산</h3>
+      <p class="mut sm" style="margin-top:0">홈 첫 카드의 <b>현재 자산</b>에 쓰여요. 바이비트를 연결하면 바이비트 잔고는 자동이에요.</p>
+      <div class="row" style="margin-top:0">
+        <div><label for="asBybit">바이비트 ($)</label><input id="asBybit" type="number" inputmode="decimal" step="any" placeholder="연결하면 자동"></div>
+        <div><label for="asUpbit">업비트 (₩)</label><input id="asUpbit" type="number" inputmode="decimal" step="any" placeholder="예: 3000000"></div>
+      </div>
     </div>
-    <div class="card"><h3>김치 프리미엄</h3><div id="kpTable"></div></div>
-    <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
-    <div class="card"><h3>진행 중 포지션</h3><div id="openBody"></div></div>
     <div class="card" id="bbCard">
       <h3>바이비트 연결</h3>
       <div id="bbBody"></div>
@@ -108,10 +138,11 @@
 </main>
 
 <nav class="tabs">
-  <button data-v="vChart" class="on"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 15l3-4 3 2 5-6"/></svg><span>차트</span></button>
-  <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>매매</span></button>
+  <button data-v="vHome" class="on"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-6h4v6"/></svg><span>홈</span></button>
+  <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>매매</span></button>
+  <button data-v="vChart"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>차트</span></button>
+  <button data-v="vAcct"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg><span>손익</span></button>
   <button data-v="vJournal"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg><span>일지</span></button>
-  <button data-v="vAcct"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5c0-1 1-1.6 2.5-1.6s2.5.7 2.5 1.8c0 2.6-5 1.3-5 4 0 1.1 1.1 1.8 2.5 1.8s2.5-.6 2.5-1.6"/></svg><span>회계</span></button>
 </nav>
 
 <!-- 시트(팝업) -->
