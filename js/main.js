@@ -1696,7 +1696,7 @@
       if (!$("bbKey")) {
         $("bbBody").innerHTML = `<p class="mut sm" style="margin-top:0">바이비트에서 만든 <b>읽기 전용</b> 열쇠를 넣으면 매매가 자동으로 기록돼요. 열쇠는 이 기기에만 저장되고 동기화로 올라가지 않아요. (기록은 동기화돼요)</p>
           <label for="bbKey">API Key</label><input id="bbKey" autocomplete="off" spellcheck="false">
-          <label for="bbSec">API Secret</label><input id="bbSec" type="password" autocomplete="off" spellcheck="false">
+          <label for="bbSec">API Secret</label><input id="bbSec" type="text" class="secret" autocomplete="off" data-lpignore="true" spellcheck="false">
           <div class="row"><button class="primary" id="bbGo">연결</button></div>`;
         $("bbGo").onclick = async () => {
           $("bbGo").disabled = true; $("bbErr").textContent = "";
@@ -1740,7 +1740,7 @@
       if (!$("ubKey")) {
         box.innerHTML = `<p class="mut sm" style="margin-top:0">업비트 Open API의 <b>조회 전용</b> 열쇠를 넣어 주세요. 열쇠는 이 PC 파일에만 저장되고 폰·인터넷으로 올라가지 않아요.</p>
           <label for="ubKey">Access Key</label><input id="ubKey" autocomplete="off" spellcheck="false">
-          <label for="ubSec">Secret Key</label><input id="ubSec" type="password" autocomplete="off" spellcheck="false">
+          <label for="ubSec">Secret Key</label><input id="ubSec" type="text" class="secret" autocomplete="off" data-lpignore="true" spellcheck="false">
           <div class="row"><button class="primary" id="ubGo">연결</button></div>`;
         $("ubGo").onclick = async () => {
           $("ubGo").disabled = true; $("ubErr").textContent = "";

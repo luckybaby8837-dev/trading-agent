@@ -113,7 +113,7 @@
     <div class="card" id="tkSetup" hidden>
       <h3>상담사 연결</h3>
       <p class="mut sm" style="margin-top:0">Claude API 열쇠가 필요해요. <b>console.anthropic.com</b> → API Keys에서 만들고 크레딧을 충전한 뒤 아래에 넣어 주세요. 열쇠는 <b>이 기기에만</b> 저장돼요 (다른 기기와 동기화 안 함). 쓴 만큼 요금이 나와요.</p>
-      <label for="tkKey">API 열쇠</label><input id="tkKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+      <label for="tkKey">API 열쇠</label><input id="tkKey" type="text" class="secret" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="sk-ant-...">
       <div class="row"><button class="primary" id="tkKeySave">저장</button><button id="tkKeyCancel">취소</button></div>
     </div>
     <div class="talk" id="tkLog"></div>
