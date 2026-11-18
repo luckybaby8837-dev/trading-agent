@@ -286,7 +286,8 @@ body.mkOpen{overflow:hidden}
 .addPic{display:block;width:100%;margin-bottom:12px;border-style:dashed;background:none;color:var(--mut);font-weight:600}
 .addPic small{font-weight:500}
 .toolsR{display:flex;gap:6px;flex:none}
-#shotBtn{display:flex;align-items:center;gap:5px;white-space:nowrap}
+#shotBtn{display:flex;align-items:center;gap:5px;white-space:nowrap;margin-left:auto;flex:none}
+@media (max-width:420px){#shotBtn span{display:none}#shotBtn{padding:8px 11px}}
 #shotBtn svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linejoin:round}
 .pnote{margin-top:10px;padding-top:10px;border-top:1px solid var(--bd);cursor:default}
 .pn{font-size:13px;line-height:1.45;margin-bottom:4px;word-break:break-all}.pn .mut{font-size:11.5px;margin-right:4px}
