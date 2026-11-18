@@ -253,3 +253,35 @@ body[data-v="vChart"] #topMain{display:none}
 .tline .tp{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}
 .tline .tp b{font-family:var(--mono);font-size:14px}.tline .tp small{font-family:var(--mono);font-size:11.5px}
 #trList{margin-top:14px}
+
+/* 그리기 편집기 */
+body.mkOpen{overflow:hidden}
+.mk{position:fixed;inset:0;z-index:80;background:#0c0e13;display:flex;flex-direction:column;color:#eceef3;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.mk[hidden]{display:none}
+.mk button{color:#eceef3;background:#1c212c;border-color:#262c39}
+.mk button.primary{background:var(--ac);border-color:var(--ac);color:#fff}
+.mk button.ghost{background:none;border-color:transparent}
+.mk svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mkTop{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;gap:8px}
+.mkUndo{display:flex;gap:4px}.mkUndo button{min-height:40px;padding:6px 10px}
+.mkStage{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;padding:4px}
+.mkStage canvas{touch-action:none;border-radius:6px;background:#000}
+.mkBar{padding:8px 10px 10px;border-top:1px solid #262c39;display:flex;flex-direction:column;gap:8px}
+.mkTools{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.mkTools::-webkit-scrollbar{display:none}
+.mkTools button{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:0;padding:7px 10px;font-size:11.5px;font-weight:600}
+.mkTools button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.mkOpt{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mkColors{display:flex;gap:7px}
+.mkColors button{width:28px;height:28px;min-height:0;padding:0;border-radius:50%;border:2px solid #262c39}
+.mkColors button.on{outline:2px solid #fff;outline-offset:2px}
+.mkSizes{display:flex;gap:4px}
+.mkSizes button{min-height:32px;padding:4px 10px;font-size:12.5px}
+.mkSizes button.on{background:#eceef3;color:#0c0e13}
+.mkOpt .danger{margin-left:auto;color:#ff6a70}
+.mkBox{position:absolute;z-index:2;width:240px;background:#1c212c;border:1px solid #3a4152;border-radius:12px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.5)}
+.mkBox textarea{width:100%;min-height:56px;background:#0c0e13;color:#eceef3;border:1px solid #3a4152;border-radius:8px;font-weight:700;font-size:15px}
+.mkBox .row{margin-top:8px}
+#jDraw{margin:10px 0 0 10px;vertical-align:top}
+.addPic{display:block;width:100%;margin-bottom:12px;border-style:dashed;background:none;color:var(--mut);font-weight:600}
+.addPic small{font-weight:500}

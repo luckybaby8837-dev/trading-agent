@@ -27,6 +27,7 @@
     const l = layers.pop();
     if (!l) return;
     if (l.type === "sheet") hideSheet();
+    else if (l.type === "markup") Markup.cancel();
     else showView(l.back, true);
   });
   function hideSheet() { $("sheet").hidden = $("sheetBg").hidden = true; $("sheetIn").innerHTML = ""; }
@@ -486,11 +487,24 @@
       <div class="card"><h3>매매 근거</h3><div class="chips">${(t.basis || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.why ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.why)}</p>` : ""}</div>
       <div class="card"><h3>심리 상태</h3><div class="chips">${(t.mood || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.moodText ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.moodText)}</p>` : ""}
         ${t.lesson ? `<h3 style="margin-top:14px">청산 후 생각</h3><p style="white-space:pre-wrap;margin:0">${esc(t.lesson)}</p>` : ""}</div>
-      ${t.img ? `<div class="card"><h3>진입 때 차트</h3><img class="pic" src="${t.img}" alt="진입 때 차트"></div>` : ""}
-      ${t.imgRes ? `<div class="card"><h3>결과 차트</h3><img class="pic" src="${t.imgRes}" alt="결과 차트"></div>` : ""}
+      ${["img", "imgRes"].map((f) => {
+        const name = f === "img" ? "진입 때 차트" : "결과 차트";
+        return t[f] ? `<div class="card"><div class="sh" style="margin-bottom:8px"><h3 style="margin:0">${name}</h3><button class="sm" data-draw="${f}">✏️ 그리기·수정</button></div><img class="pic" src="${t[f]}" alt="${name}" data-view="${f}"></div>`
+          : `<button class="addPic" data-add="${f}">+ ${name} 사진 넣기 <small>(스크린샷)</small></button>`;
+      }).join("")}
+      <input type="file" id="dPic" accept="image/*" hidden>
       <div class="row wrap">${t.status === "open" ? `${t.src === "bybit" || t.src === "upbit" ? "" : '<button id="dClose">청산 기록</button>'}<button class="primary" id="dBasis">근거 적기</button>` : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
     $("shX").onclick = closeSheet;
     $("dEdit").onclick = () => tradeForm(t);
+    $("sheetIn").querySelectorAll("[data-draw]").forEach((b) => b.onclick = async () => { closeSheet(); await new Promise((r) => setTimeout(r, 50)); await editRecordImage("trades", t, b.dataset.draw); tradeDetail(t.id); });
+    $("sheetIn").querySelectorAll("[data-view]").forEach((im) => im.onclick = () => viewImg(im.src));
+    let addField = null;
+    $("sheetIn").querySelectorAll("[data-add]").forEach((b) => b.onclick = () => { addField = b.dataset.add; $("dPic").click(); });
+    $("dPic").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f || !addField) return;
+      t[addField] = await shrink(f, 1600); t[addField + "Edit"] = null;
+      await Store.put("trades", t); await loadData(); toast("사진을 넣었어요"); tradeDetail(t.id);
+    };
     if ($("dClose")) $("dClose").onclick = () => closeForm(t);
     if ($("dBasis")) $("dBasis").onclick = () => basisForm(t.id);
     if ($("dReopen")) $("dReopen").onclick = async () => { Object.assign(t, { status: "open", exit: 0, pnl: null, hit: "" }); await Store.put("trades", t); await loadData(); tradeDetail(t.id); renderTrades(); };
@@ -565,15 +579,46 @@
 
   // ---------- 일지 ----------
   $("jDate").value = today();
-  let getMood = chips($("moodChips"), MOODS, [], true), jImg, jEdit = null;
+  let getMood = chips($("moodChips"), MOODS, [], true), jImg, jImgEdit, jEdit = null;
+  // 그리기 편집기 열기 (뒤로가기로도 닫힘). 저장하면 { img: 합친 그림, edit: { base, marks } }
+  async function editImage(base, marks) {
+    const layer = { type: "markup" };
+    layers.push(layer); history.pushState({ ta: layers.length }, "");
+    const r = await Markup.open(base, marks);
+    if (layers[layers.length - 1] === layer) { layers.pop(); ignorePop++; history.back(); }
+    return r;
+  }
   function jPrev(src) {
-    $("jImgPrev").innerHTML = src ? `<div class="thumbW"><img class="thumb" src="${src}" alt="첨부 사진"><button type="button" class="thumbX" aria-label="사진 지우기">✕</button></div>` : "";
+    $("jImgPrev").innerHTML = src ? `<div class="thumbW"><img class="thumb" src="${src}" alt="첨부 사진"><button type="button" class="thumbX" aria-label="사진 지우기">✕</button></div><button type="button" class="sm" id="jDraw">✏️ 그리기·글씨</button>` : "";
+    if (src) $("jDraw").onclick = async () => {
+      const same = jEdit && jEdit.date === ($("jDate").value || today());
+      const ed = jImgEdit !== undefined ? jImgEdit : same ? jEdit.imgEdit : null;
+      const r = await editImage((ed && ed.base) || src, ed && ed.marks);
+      if (!r) return;
+      jImg = r.img; jImgEdit = r.edit || (ed ? null : null); if (!r.edit && ed) jImg = ed.base;
+      jPrev(jImg); $("jMsg").textContent = "그림을 고쳤어요. 일지 저장을 눌러야 반영돼요.";
+    };
     if (!src) return;
     $("jImgPrev").querySelector(".thumb").onclick = () => viewImg(src);
-    $("jImgPrev").querySelector(".thumbX").onclick = () => { jImg = null; jPrev(null); $("jMsg").textContent = "사진을 뺐어요. 일지 저장을 눌러야 반영돼요."; };
+    $("jImgPrev").querySelector(".thumbX").onclick = () => { jImg = null; jImgEdit = null; jPrev(null); $("jMsg").textContent = "사진을 뺐어요. 일지 저장을 눌러야 반영돼요."; };
   }
   // 사진 크게 보기
-  function viewImg(src) { sheet(`<div class="sh"><h2>사진</h2><button class="ghost" id="shX">닫기</button></div><img class="pic" src="${src}" alt="사진">`); $("shX").onclick = closeSheet; }
+  function viewImg(src, onEdit) {
+    sheet(`<div class="sh"><h2>사진</h2><div class="row" style="margin:0;flex:none;gap:6px">${onEdit ? '<button class="sm" id="shDraw">✏️ 그리기·수정</button>' : ""}<button class="ghost" id="shX">닫기</button></div></div><img class="pic" src="${src}" alt="사진">`);
+    $("shX").onclick = closeSheet;
+    if (onEdit) $("shDraw").onclick = () => { closeSheet(); setTimeout(onEdit, 50); };
+  }
+  // 저장된 기록의 사진 그리기·수정 (field: "img" / "imgRes")
+  async function editRecordImage(store, rec, field) {
+    const ed = rec[field + "Edit"];
+    const r = await editImage((ed && ed.base) || rec[field], ed && ed.marks);
+    if (!r) return false;
+    rec[field] = r.edit ? r.img : (ed ? ed.base : r.img);
+    rec[field + "Edit"] = r.edit || null;
+    await Store.put(store, rec); await loadData();
+    toast("그림을 저장했어요");
+    return true;
+  }
   const memoTa = $("memoText");
   memoTa.addEventListener("input", () => { memoTa.style.height = "auto"; memoTa.style.height = memoTa.scrollHeight + "px"; });
   $("memoSave").onclick = async () => {
@@ -583,18 +628,28 @@
     await loadData(); renderJournal();
   };
   $("jImgBtn").onclick = () => $("jImg").click();
-  $("jImg").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; jImg = await shrink(f); jPrev(jImg); e.target.value = ""; };
+  $("jImg").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; jImg = await shrink(f); jImgEdit = null; jPrev(jImg); e.target.value = ""; };
+  // PC: 일지 화면에서 Ctrl+V로 스크린샷 붙여넣기
+  document.addEventListener("paste", async (e) => {
+    if (!$("vJournal").classList.contains("on") || Markup.isOpen()) return;
+    const it = [...(e.clipboardData ? e.clipboardData.items : [])].find((x) => x.type.startsWith("image/"));
+    if (!it) return;
+    e.preventDefault();
+    jImg = await shrink(it.getAsFile()); jImgEdit = null; jPrev(jImg);
+    $("jMsg").textContent = "스크린샷을 붙여 넣었어요. 일지 저장을 눌러야 반영돼요.";
+  });
   $("jDate").onchange = () => { jEdit = null; renderJournal(); };
   $("jSave").onclick = async () => {
     const text = $("jText").value.trim(), mood = getMood();
     const d0 = $("jDate").value || today(), same = jEdit && jEdit.date === d0;
     const img = jImg === undefined ? (same && jEdit.img) || null : jImg;
+    const imgEdit = jImgEdit === undefined ? (same && jEdit.imgEdit) || null : jImgEdit;
     if (!text && !mood.length && !img) { $("jMsg").textContent = "내용을 적어 주세요."; return; }
     $("jSave").disabled = true; $("jMsg").textContent = "저장하는 중…";
     try {
       const d = $("jDate").value || today();
-      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img });
-      await Store.put("journal", e); jEdit = e; jImg = undefined;
+      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img, imgEdit: img ? imgEdit : null });
+      await Store.put("journal", e); jEdit = e; jImg = undefined; jImgEdit = undefined;
       await loadData(); renderJournal(true);
       $("jMsg").textContent = "저장했어요 · " + nowHM(); toast("일지를 저장했어요");
     } catch (x) {
@@ -605,7 +660,7 @@
     const d = $("jDate").value || today();
     const diary = st.journal.find((j) => j.kind === "diary" && j.date === d && !j.src);
     if (!keepForm) {
-      jEdit = diary || null; jImg = undefined;
+      jEdit = diary || null; jImg = undefined; jImgEdit = undefined;
       $("jText").value = diary ? diary.text || "" : "";
       getMood = chips($("moodChips"), MOODS, diary ? diary.mood || [] : [], true);
       jPrev(diary && diary.img);
@@ -617,7 +672,10 @@
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
     $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 메모·매매가 없어요.</div>`;
-    $("dayList").querySelectorAll("[data-img]").forEach((im) => im.onclick = () => viewImg(im.src));
+    $("dayList").querySelectorAll("[data-img]").forEach((im) => im.onclick = () => {
+      const j = st.journal.find((x) => x.id === im.dataset.img);
+      viewImg(im.src, j ? async () => { if (await editRecordImage("journal", j, "img")) renderJournal(); } : null);
+    });
     $("dayList").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
       if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더 누르면 삭제"; return; }
       await Store.del("journal", b.dataset.del); await loadData(); renderJournal(true);
