@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>트레이딩 에이전트</title>
+<meta name="theme-color" content="#0b0d12">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <div class="seg coin" id="coinSeg"></div>
+  <div class="px">
+    <b id="pxMain">—</b>
+    <span id="pxChg" class="chg">—</span>
+  </div>
+  <div class="sub" id="subLine"><span id="kpLine">김프 —</span><span id="fxLine">환율 —</span></div>
+  <span class="dot" id="liveDot" title="실시간 연결"></span>
+</header>
+
+<main>
+  <!-- 차트 -->
+  <section id="vChart" class="view on">
+    <div class="bar">
+      <div class="seg tf" id="tfSeg"></div>
+      <button class="ghost" id="indBtn" aria-haspopup="true">지표</button>
+    </div>
+    <div class="menu" id="indMenu" hidden></div>
+    <div class="chartWrap"><div id="chart"></div><div class="hintBox" id="drawHint" hidden></div></div>
+    <div class="bar tools">
+      <div class="tools-g" id="toolSeg"></div>
+      <button class="primary" id="anaBtn">분석 자료</button>
+    </div>
+  </section>
+
+  <!-- 매매 -->
+  <section id="vTrade" class="view">
+    <div class="head"><h2>매매 기록</h2><button class="primary" id="newTrade">+ 새 매매</button></div>
+    <div class="seg filter" id="trFilter"></div>
+    <div id="trList"></div>
+  </section>
+
+  <!-- 일지 -->
+  <section id="vJournal" class="view">
+    <div class="card memo">
+      <textarea id="memoText" rows="1" placeholder="지금 드는 생각을 바로 적어 두세요"></textarea>
+      <div class="memoRow"><span class="mut sm" id="memoMsg"></span><button class="primary sm" id="memoSave">메모 저장</button></div>
+    </div>
+    <div class="head"><h2>오늘의 일지</h2><input type="date" id="jDate"></div>
+    <div class="card" id="diaryCard">
+      <label>심리 상태</label>
+      <div class="chips" id="moodChips"></div>
+      <label for="jText">일지</label>
+      <textarea id="jText" rows="5" placeholder="오늘 매매하며 느낀 감정, 생각, 다짐을 적어 보세요"></textarea>
+      <div class="row">
+        <button id="jImgBtn">사진 첨부</button>
+        <button class="primary" id="jSave">일지 저장</button>
+      </div>
+      <input type="file" id="jImg" accept="image/*" hidden>
+      <div id="jImgPrev"></div>
+      <div class="mut sm" id="jMsg"></div>
+    </div>
+    <div class="head"><h2>이날의 기록</h2></div>
+    <div id="dayList"></div>
+    <div class="head"><h2>지난 일지</h2></div>
+    <div id="pastList"></div>
+  </section>
+
+  <!-- 회계 -->
+  <section id="vAcct" class="view">
+    <div class="grid2">
+      <div class="card stat"><span>달러 환율</span><b id="aFx">—</b><small id="aFxNote" class="mut"></small></div>
+      <div class="card stat"><span>업비트 테더(USDT)</span><b id="aUsdt">—</b><small id="aUsdtNote" class="mut"></small></div>
+    </div>
+    <div class="card"><h3>김치 프리미엄</h3><div id="kpTable"></div></div>
+    <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
+    <div class="card"><h3>진행 중 포지션</h3><div id="openBody"></div></div>
+    <div class="card">
+      <h3>데이터</h3>
+      <p class="mut sm">시크릿 트레이딩 노트의 <b>백업 저장</b> 파일(또는 백업 텍스트)을 불러오면 매매 기록과 일지를 옮겨 와요. 노트는 그대로 남아요.</p>
+      <div class="row wrap">
+        <button id="impFileBtn">노트 백업 파일 불러오기</button>
+        <button id="impTextBtn">백업 텍스트 붙여넣기</button>
+        <button id="expBtn">이 앱 백업 저장</button>
+      </div>
+      <input type="file" id="impFile" accept="application/json,.json,.txt" hidden>
+      <div class="mut sm" id="impMsg"></div>
+    </div>
+  </section>
+</main>
+
+<nav class="tabs">
+  <button data-v="vChart" class="on"><svg viewBox="0 0 24 24"><path d="M4 19V5M4 19h16"/><path d="M8 15l3-4 3 2 5-6"/></svg><span>차트</span></button>
+  <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>매매</span></button>
+  <button data-v="vJournal"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg><span>일지</span></button>
+  <button data-v="vAcct"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v10M9.5 9.5c0-1 1-1.6 2.5-1.6s2.5.7 2.5 1.8c0 2.6-5 1.3-5 4 0 1.1 1.1 1.8 2.5 1.8s2.5-.6 2.5-1.6"/></svg><span>회계</span></button>
+</nav>
+
+<!-- 시트(팝업) -->
+<div class="sheetBg" id="sheetBg" hidden></div>
+<div class="sheet" id="sheet" hidden><div class="sheetIn" id="sheetIn"></div></div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="js/store.js"></script>
+<script src="js/market.js"></script>
+<script src="js/indicators.js"></script>
+<script src="js/chart.js"></script>
+<script src="js/analysis.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
