@@ -937,5 +937,14 @@
     setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) { renderOpen(); renderNews(); } if ($("vTeam").classList.contains("on")) renderTeamList(); }, 3000);
   })();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => Chart.retheme());
-  if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && location.protocol !== "file:") {
+    // 새 버전이 올라오면 자동으로 받아서 한 번 새로 고침
+    const had = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
+      setInterval(() => reg.update().catch(() => {}), 10 * 60e3);
+    }).catch(() => {});
+  }
 })();
