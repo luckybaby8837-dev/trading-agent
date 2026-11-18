@@ -568,7 +568,7 @@
       <div class="card"><h3>매매 근거</h3><div class="chips">${(t.basis || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.why ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.why)}</p>` : ""}</div>
       <div class="card"><h3>심리 상태</h3><div class="chips">${(t.mood || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.moodText ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.moodText)}</p>` : ""}
         ${t.lesson ? `<h3 style="margin-top:14px">청산 후 생각</h3><p style="white-space:pre-wrap;margin:0">${esc(t.lesson)}</p>` : ""}</div>
-      ${(t.notes || []).length ? `<div class="card"><h3>포지션 동안 남긴 생각</h3>${t.notes.map((n) => `<div class="pn"><span class="mut">${esc(n.d.slice(5))} ${esc(n.tm)}</span> ${esc(n.text)}</div>`).join("")}</div>` : ""}
+      ${(t.notes || []).length ? `<div class="card"><h3>포지션 동안 남긴 생각</h3>${t.notes.map((n) => noteLine(n, t.id, true)).join("")}</div>` : ""}
       ${["img", "imgRes"].map((f) => {
         const name = f === "img" ? "진입 때 차트" : "결과 차트";
         return t[f] ? `<div class="card"><div class="sh" style="margin-bottom:8px"><h3 style="margin:0">${name}</h3><button class="sm" data-draw="${f}">✏️ 그리기·수정</button></div><img class="pic" src="${t[f]}" alt="${name}" data-view="${f}"></div>`
@@ -578,6 +578,7 @@
       <div class="row wrap">${t.status === "open" ? `${t.src === "bybit" || t.src === "upbit" ? "" : '<button id="dClose">청산 기록</button>'}<button class="primary" id="dBasis">근거 적기</button>` : '<button id="dReopen">진행 중으로 되돌리기</button>'}<button id="dEdit">수정</button><button class="danger" id="dDel">삭제</button></div>`);
     $("shX").onclick = closeSheet;
     $("dEdit").onclick = () => tradeForm(t);
+    $("sheetIn").querySelectorAll("[data-nd]").forEach((b) => b.onclick = async () => { if (await delNote(t.id, b.dataset.at)) { tradeDetail(t.id); renderOpen(); } });
     $("sheetIn").querySelectorAll("[data-draw]").forEach((b) => b.onclick = async () => { closeSheet(); await new Promise((r) => setTimeout(r, 50)); await editRecordImage("trades", t, b.dataset.draw); tradeDetail(t.id); });
     $("sheetIn").querySelectorAll("[data-view]").forEach((im) => im.onclick = () => viewImg(im.src));
     let addField = null;
@@ -907,7 +908,15 @@
     t.notes = [...(t.notes || []), { at: Date.now(), d: today(), tm: nowHM(), text }];
     await Store.put("trades", t); await loadData(); toast("생각을 남겼어요");
   }
-  const noteLine = (n) => `<div class="pn"><span class="mut">${n.d === today() ? "" : esc(n.d.slice(5)) + " "}${esc(n.tm)}</span> ${esc(n.text)}</div>`;
+  async function delNote(id, at) {
+    const t = st.trades.find((x) => x.id === id); if (!t) return false;
+    const n = (t.notes || []).find((x) => String(x.at) === String(at)); if (!n) return false;
+    if (!confirm(`이 생각을 지울까요?\n\n"${n.text}"`)) return false;
+    t.notes = t.notes.filter((x) => x !== n);
+    await Store.put("trades", t); await loadData(); toast("생각을 지웠어요"); return true;
+  }
+  // full: 날짜 항상 표시 (상세 화면)
+  const noteLine = (n, id, full) => `<div class="pn"><span class="pnT"><span class="mut">${!full && n.d === today() ? "" : esc(n.d.slice(5)) + " "}${esc(n.tm)}</span> ${esc(n.text)}</span>${id ? `<button class="pnDel" data-nd="${id}" data-at="${n.at}" aria-label="이 생각 지우기">✕</button>` : ""}</div>`;
   function renderOpen() {
     // 생각을 쓰는 중이면 다시 그리지 않음 (쓰던 글이 지워지지 않게)
     const typing = [...$("hOpen").querySelectorAll(".pnIn")].some((x) => x.value.trim() || document.activeElement === x);
@@ -921,7 +930,7 @@
         ? `<div class="bline"><span>${esc([...(t.basis || []), t.why].filter(Boolean).join(" · "))}</span><button class="sm ghost" data-b="${t.id}">수정</button></div>`
         : `<div class="bline need"><span>근거 미입력</span><button class="sm primary" data-b="${t.id}">근거 적기</button></div>`;
       const notes = (t.notes || []).slice(-2);
-      const pn = `<div class="pnote">${notes.map(noteLine).join("")}<div class="pnRow"><input class="pnIn" data-n="${t.id}" placeholder="지금 이 포지션에 대한 생각" enterkeyhint="done"><button class="sm primary" data-ns="${t.id}">남기기</button></div></div>`;
+      const pn = `<div class="pnote">${notes.map((n) => noteLine(n, t.id)).join("")}<div class="pnRow"><input class="pnIn" data-n="${t.id}" placeholder="지금 이 포지션에 대한 생각" enterkeyhint="done"><button class="sm primary" data-ns="${t.id}">남기기</button></div></div>`;
       return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `).replace(/<\/div>\s*$/, line + pn + "</div>");
     }).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
     $("hOpen").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
@@ -929,6 +938,7 @@
     $("hOpen").querySelectorAll(".pnote").forEach((x) => x.onclick = (e) => e.stopPropagation());
     const send = async (id) => { const inp = $("hOpen").querySelector(`.pnIn[data-n="${id}"]`), v = inp.value.trim(); if (!v) return; inp.value = ""; inp.blur(); await addNote(id, v); renderOpen(); };
     $("hOpen").querySelectorAll("[data-ns]").forEach((b) => b.onclick = () => send(b.dataset.ns));
+    $("hOpen").querySelectorAll("[data-nd]").forEach((b) => b.onclick = async () => { if (await delNote(b.dataset.nd, b.dataset.at)) renderOpen(); });
     $("hOpen").querySelectorAll(".pnIn").forEach((inp) => inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(inp.dataset.n); } });
   }
   function renderHome() {

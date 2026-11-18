@@ -355,3 +355,5 @@ body.mkOpen{overflow:hidden}
 .talkBar button{min-height:46px}
 .tkNote{margin-top:6px}.tkNote button{padding:2px 6px;min-height:0}
 .talkTxt{white-space:pre-wrap}
+.pn{display:flex;align-items:flex-start;gap:6px}.pnT{flex:1;min-width:0}
+.pnDel{flex:none;border:0;background:none;color:var(--mut);min-height:0;width:28px;height:24px;padding:0;font-size:13px;line-height:1;border-radius:6px;cursor:pointer}.pnDel:active{background:var(--card2);color:var(--dn)}
