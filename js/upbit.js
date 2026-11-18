@@ -7,7 +7,7 @@
 const Upbit = (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const DAYS = 365, WIN = 7 * 864e5;
-  const FROM = "2026-10-01"; // 이 날짜 이전 업비트 매매·입출금은 앱에 넣지 않음 (사용자 요청). 평균 매수가 계산엔 그대로 씀
+  const FROM = "2026-10-14"; // 이 날짜 이전 업비트 매매·입출금은 앱에 넣지 않음 (사용자 요청). 평균 매수가 계산엔 그대로 씀
   let server = false, configured = false, busy = false, timer = 0;
   let status = { msg: "", err: "", at: 0 };
   let onStatus = () => {}, onData = () => {};
