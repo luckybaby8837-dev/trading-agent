@@ -55,6 +55,32 @@ const Bybit = (() => {
     }
     return out;
   }
+  // 지금 포지션이 언제 열렸는지: 최근 체결부터 거꾸로 수량을 되감아 0이 되는 시점 (최대 90일)
+  async function openTime(symbol, side, size) {
+    const inc = side === "long" ? "Buy" : "Sell";
+    let remain = size, end = Date.now() + offset;
+    const stop = end - 90 * 864e5;
+    while (end > stop) {
+      const start = end - 7 * 864e5 + 1000;
+      let cursor = "", list = [];
+      do {
+        const q = { category: "linear", symbol, startTime: String(start), endTime: String(end), limit: "100" };
+        if (cursor) q.cursor = cursor;
+        const r = await get("/v5/execution/list", q);
+        list.push(...(r.list || []).filter((x) => x.execType === "Trade"));
+        cursor = r.nextPageCursor || "";
+        await sleep(80);
+      } while (cursor);
+      list.sort((a, b) => +b.execTime - +a.execTime);
+      for (const x of list) {
+        const q = +x.execQty;
+        remain += x.side === inc ? -q : q;
+        if (remain <= size * 1e-6) return +x.execTime;
+      }
+      end = start - 1;
+    }
+    return null;
+  }
   async function positions() {
     const r = await get("/v5/position/list", { category: "linear", settleCoin: "USDT", limit: "200" });
     return (r.list || []).filter((p) => +p.size > 0);
@@ -111,11 +137,19 @@ const Bybit = (() => {
       for (const p of pos) {
         const side = p.side === "Buy" ? "long" : "short", id = `bbpos_${p.symbol}_${side}`;
         live.add(id);
-        const old = byId.get(id), [d, t] = dt(p.createdTime || Date.now());
+        const old = byId.get(id);
         const rec = { id, src: "bybit", venue: "bybit", coin: coinOf(p.symbol), side, status: "open", en: +p.avgPrice, qty: +p.size, lev: +p.leverage || 0 };
         if (+p.stopLoss) rec.sl = +p.stopLoss;
         if (+p.takeProfit) rec.tp = +p.takeProfit;
-        if (!old) Object.assign(rec, { date: d, time: t, basis: [], mood: [], why: "" });
+        // 바이비트의 createdTime은 '이 종목 포지션 칸이 처음 생긴 때'라서 몇 년 전일 수 있음 → 체결 내역으로 실제 진입 시각을 찾음
+        const sizeKey = `${p.size}|${p.avgPrice}`;
+        if (!old || !old.openFound || old.sizeKey !== sizeKey) {
+          const ot = await openTime(p.symbol, side, +p.size).catch(() => null);
+          if (ot) { const [d, t] = dt(ot); Object.assign(rec, { date: d, time: t, openFound: true }); }
+          else if (!old) { const [d, t] = dt(Date.now()); Object.assign(rec, { date: d, time: t }); }
+          rec.sizeKey = sizeKey;
+        }
+        if (!old) Object.assign(rec, { basis: [], mood: [], why: "" });
         if (await save(rec, old)) n++;
       }
       for (const t of all) if (t.id.startsWith("bbpos_") && !live.has(t.id)) { await Store.del("trades", t.id); n++; }
