@@ -81,6 +81,12 @@
     <div class="card"><h3>김치 프리미엄</h3><div id="kpTable"></div></div>
     <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
     <div class="card"><h3>진행 중 포지션</h3><div id="openBody"></div></div>
+    <div class="card" id="bbCard">
+      <h3>바이비트 연결</h3>
+      <div id="bbBody"></div>
+      <div class="mut sm" id="bbMsg"></div>
+      <div class="err" id="bbErr"></div>
+    </div>
     <div class="card" id="syncCard">
       <h3>폰·PC 동기화</h3>
       <p class="mut sm" id="syncMsg" style="margin-top:0">불러오는 중</p>
@@ -119,6 +125,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script src="js/store.js"></script>
 <script src="js/sync.js"></script>
+<script src="js/bybit.js"></script>
 <script src="js/market.js"></script>
 <script src="js/indicators.js"></script>
 <script src="js/chart.js"></script>

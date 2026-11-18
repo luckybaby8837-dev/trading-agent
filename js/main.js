@@ -276,7 +276,7 @@
     const pnl = t.status === "open" ? (lp ? tradePnl(t, lp) : null) : (t.pnl ?? tradePnl(t));
     const pct = t.status === "open" && lp && t.en ? ((lp / t.en - 1) * 100 * (t.side === "short" ? -1 : 1)) : null;
     return `<div class="item" data-id="${t.id}">
-      <div class="l1"><div><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> <span class="mut sm">${venueName[t.venue]} · ${esc(Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf || "")}</span>${t.status === "open" ? ' <span class="badge open">진행 중</span>' : t.hit ? ` <span class="badge spot">${esc(t.hit)}</span>` : ""}</div>
+      <div class="l1"><div><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> <span class="mut sm">${venueName[t.venue]}${t.src === "bybit" ? " 자동" : ""} ·${esc(Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf || "")}</span>${t.status === "open" ? ' <span class="badge open">진행 중</span>' : t.hit ? ` <span class="badge spot">${esc(t.hit)}</span>` : ""}</div>
       <b class="num ${sgn(pnl || 0)}">${pnl == null ? "—" : money(pnl, cur)}</b></div>
       <div class="l2"><span>${esc(t.date)} ${esc(t.time || "")} · 진입 ${t.en ? Chart.fmtP(t.en) : "—"}${t.exit ? " → " + Chart.fmtP(t.exit) : ""}</span><span>${pct != null ? `<b class="${sgn(pct)}">${pctS(pct)}</b>` : esc((t.basis || []).slice(0, 3).join(" · "))}</span></div>
     </div>`;
@@ -573,6 +573,47 @@
     b.className = u ? "" : "primary";
   });
   $("syncBtn").onclick = () => (Sync.user ? Sync.logout() : Sync.login());
+
+  // ---------- 바이비트 연결 ----------
+  const refreshViews = async () => {
+    await loadData();
+    if ($("vTrade").classList.contains("on")) renderTrades();
+    if ($("vJournal").classList.contains("on")) renderJournal(true);
+    if ($("vAcct").classList.contains("on")) renderAcct();
+  };
+  function bbView(s, on, live) {
+    if (!on) {
+      if (!$("bbKey")) {
+        $("bbBody").innerHTML = `<p class="mut sm" style="margin-top:0">바이비트에서 만든 <b>읽기 전용</b> 열쇠를 넣으면 매매가 자동으로 기록돼요. 열쇠는 이 기기에만 저장되고 동기화로 올라가지 않아요. (기록은 동기화돼요)</p>
+          <label for="bbKey">API Key</label><input id="bbKey" autocomplete="off" spellcheck="false">
+          <label for="bbSec">API Secret</label><input id="bbSec" type="password" autocomplete="off" spellcheck="false">
+          <div class="row"><button class="primary" id="bbGo">연결</button></div>`;
+        $("bbGo").onclick = async () => {
+          $("bbGo").disabled = true; $("bbErr").textContent = "";
+          try { const n = await Bybit.connect($("bbKey").value, $("bbSec").value); toast(`바이비트 연결됨 · 최근 30일 기록 ${n}건 반영`); await refreshViews(); }
+          catch (e) { $("bbErr").textContent = e.message; }
+          finally { if ($("bbGo")) $("bbGo").disabled = false; }
+        };
+      }
+      $("bbMsg").textContent = s.msg || "";
+    } else {
+      $("bbBody").innerHTML = `<p style="margin-top:0"><b class="${live ? "up" : ""}">● ${live ? "실시간 연결됨" : "연결됨 (실시간 다시 잇는 중)"}</b></p>
+        <div class="row wrap"><button id="bbNow">지금 새로 읽기</button><button id="bbHist">지난 1년 기록 가져오기</button><button class="danger" id="bbOff">연결 끊기</button></div>`;
+      $("bbMsg").textContent = s.msg || (s.at ? "마지막 확인 " + new Date(s.at).toTimeString().slice(0, 5) : "");
+      $("bbNow").onclick = () => Bybit.refresh(Date.now() - 7 * 864e5).then((n) => toast(n ? `${n}건 반영했어요` : "새 기록이 없어요")).catch(() => {});
+      $("bbHist").onclick = async (e) => {
+        e.target.disabled = true;
+        try { const n = await Bybit.refresh(Date.now() - 365 * 864e5, (p, c) => ($("bbMsg").textContent = `가져오는 중… ${Math.round(p * 100)}% (${c}건)`)); toast(`지난 1년 · ${n}건 반영했어요`); }
+        catch {} finally { if (e.target) e.target.disabled = false; }
+      };
+      $("bbOff").onclick = (e) => {
+        if (e.target.dataset.s !== "1") { e.target.dataset.s = "1"; e.target.textContent = "한 번 더 누르면 끊기 (기록은 남아요)"; return; }
+        Bybit.disconnect();
+      };
+    }
+    $("bbErr").textContent = s.err || "";
+  }
+  Bybit.init(bbView, refreshViews);
 
   // ---------- 시작 ----------
   (async () => {
