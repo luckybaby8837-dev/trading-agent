@@ -1,8 +1,8 @@
 // 앱 화면 파일은 저장해 두고(네트워크 우선), 시세는 항상 새로 받아옴
-const CACHE = "trade-agent-v1";
+const CACHE = "trade-agent-v2";
 const SHELL = ["./", "./index.html", "./app.css", "./manifest.json", "./icon-192.png", "./icon-512.png",
-  "./js/store.js", "./js/market.js", "./js/indicators.js", "./js/chart.js", "./js/analysis.js", "./js/main.js"];
-const LIBS = ["unpkg.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com"];
+  "./js/store.js", "./js/sync.js", "./js/market.js", "./js/indicators.js", "./js/chart.js", "./js/analysis.js", "./js/main.js"];
+const LIBS = ["unpkg.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com"];
 
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
 self.addEventListener("activate", (e) => e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim())));

@@ -558,6 +558,22 @@
     toast("백업 파일을 저장했어요");
   };
 
+  // ---------- 폰·PC 동기화 ----------
+  Sync.init(async () => {
+    await loadData(); await loadDrawings();
+    if ($("vTrade").classList.contains("on")) renderTrades();
+    if ($("vJournal").classList.contains("on")) renderJournal(true);
+    if ($("vAcct").classList.contains("on")) renderAcct();
+  }, (s, u) => {
+    $("syncMsg").innerHTML = u ? `<b>${esc(u.email || "로그인됨")}</b> · ${esc(s.msg)}` : esc(s.msg);
+    $("syncErr").textContent = s.err || "";
+    const b = $("syncBtn");
+    b.disabled = !u && /연결 정보|인터넷/.test(s.msg);
+    b.textContent = u ? "로그아웃" : "구글로 로그인";
+    b.className = u ? "" : "primary";
+  });
+  $("syncBtn").onclick = () => (Sync.user ? Sync.logout() : Sync.login());
+
   // ---------- 시작 ----------
   (async () => {
     const v = Store.pref.get("view", "vChart");
