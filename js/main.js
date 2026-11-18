@@ -368,6 +368,7 @@
     st.upbitFrom = ubDates[0] || null;
     st.upSnap = (await Store.get("legacy", "upbit_snapshot")) || null;
     st.bbSnap = (await Store.get("legacy", "bybit_snapshot")) || null;
+    st.manual = (await Store.get("legacy", "manual_assets")) || null;
     updatePosLines();
   }
   // 손익 계산용: 바이비트 자동 기록이 있는 기간의 '노트에서 옮긴 바이비트 매매'는 빼고 셈 (같은 매매가 두 번 잡히지 않게)
@@ -860,6 +861,19 @@
     if (Bybit.equity) return Bybit.equity;
     const s = st.bbSnap; return s && s.v ? { v: s.v, at: s.at } : null;
   }
+  // 직접 넣은 자산 금액: 동기화되는 기록(legacy/manual_assets)에 두고, 예전 기기 저장값은 처음 한 번 옮김
+  const mget = (k) => (st.manual && st.manual[k] != null ? st.manual[k] : Store.pref.get(k, "")) || "";
+  let mT = 0;
+  const mset = (k, v) => {
+    Store.pref.set(k, v);
+    st.manual = Object.assign({ id: "manual_assets" }, st.manual || {}, { [k]: v });
+    clearTimeout(mT); mT = setTimeout(() => Store.put("legacy", st.manual), 600);
+  };
+  function moveManual() {
+    if (st.manual) return;
+    const b = Store.pref.get("asBybit", ""), u = Store.pref.get("asUpbit", "");
+    if (b || u) { st.manual = { id: "manual_assets", asBybit: b, asUpbit: u }; Store.put("legacy", st.manual); }
+  }
   function upbitEquity() {
     const s = st.upSnap; if (!s) return null;
     let v = s.krw || 0;
@@ -872,7 +886,7 @@
     let un = 0, unB = 0, unU = 0;
     for (const t of st.trades.filter((x) => x.status === "open")) { const lp = livePrice(t), p = lp ? tradePnl(t, lp) : null, c = p == null ? null : conv(p, curOf(t)); if (c != null) { un += c; if (t.venue === "upbit") unU += c; else unB += c; } }
     const ubAuto = upbitEquity();
-    const bbAuto = bybitEquity(), bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = ubAuto != null ? ubAuto : +Store.pref.get("asUpbit", 0) || 0;
+    const bbAuto = bybitEquity(), bb = bbAuto ? bbAuto.v : +mget("asBybit") || 0, ub = ubAuto != null ? ubAuto : +mget("asUpbit") || 0;
     const eqU = bb ? conv(bb, "USD") : 0, eqK = ub ? conv(ub, "KRW") : 0, has = !!(bb || ub);
     const eq = has && eqU != null && eqK != null ? eqU + eqK : null;
     // 바이비트 자동 잔고에는 미실현이 이미 들어 있음. 손으로 넣은 값엔 더해 줌
@@ -952,10 +966,10 @@
   function homeSoon() { if (hT || !$("vHome").classList.contains("on") || document.hidden) return; hT = setTimeout(() => { hT = 0; renderHero(); renderTicks(); }, 1000); }
   function renderSet() {
     const a = bybitEquity();
-    $("asBybit").value = a ? a.v.toFixed(2) : Store.pref.get("asBybit", "") || "";
+    $("asBybit").value = a ? a.v.toFixed(2) : mget("asBybit");
     $("asBybit").disabled = !!a;
     const u = upbitEquity();
-    $("asUpbit").value = u != null ? u : Store.pref.get("asUpbit", "") || "";
+    $("asUpbit").value = u != null ? u : mget("asUpbit");
     $("asUpbit").disabled = u != null;
     renderFontPick();
   }
@@ -990,8 +1004,8 @@
     $("fontPick").querySelectorAll("[data-k]").forEach((b) => b.onclick = () => { numFont = applyFont(b.dataset.k); Store.pref.set("numFont", numFont); renderFontPick(); });
   }
 
-  $("asBybit").oninput =() => Store.pref.set("asBybit", $("asBybit").value);
-  $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
+  $("asBybit").oninput = () => mset("asBybit", $("asBybit").value);
+  $("asUpbit").oninput = () => mset("asUpbit", $("asUpbit").value);
 
   // ---------- 출금 (회계팀) ----------
   // 출금·입금 기록: { kind: "out"|"in", venue, amount, cur, rate(그때 환율), type: "profit"|"principal"|"auto", date, memo }
@@ -1197,7 +1211,7 @@
   // ---------- 리스크 매니저 (거부권) ----------
   const RISK_DEF = { per: 3, day: 8, lev: 20 };
   const riskCfg = () => Object.assign({}, RISK_DEF, Store.pref.get("risk", {}));
-  const futEq = () => { const a = bybitEquity(); if (a && a.v) return a.v; const m = +Store.pref.get("asBybit", 0); return m > 0 ? m : null; };
+  const futEq = () => { const a = bybitEquity(); if (a && a.v) return a.v; const m = +mget("asBybit"); return m > 0 ? m : null; };
   const isFut = (t) => t.venue !== "upbit" && t.side !== "buy";
   function todayFutPnl() {
     let v = 0; const td = today();
@@ -1770,6 +1784,7 @@
   (async () => {
     document.body.dataset.v = "vHome";
     await loadData();
+    moveManual();
     renderHome();
     loadFx(); setInterval(loadFx, 6 * 3600e3);
     pollUpbit(); setInterval(pollUpbit, 4000);
