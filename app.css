@@ -336,3 +336,22 @@ body.mkOpen{overflow:hidden}
 .dst tr.few{opacity:.55}
 .hlink{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:12px;padding:10px 12px;min-height:0;border:1px solid var(--bd);border-radius:11px;background:var(--card2);font-size:13.5px;font-weight:600;color:var(--tx)}
 .hlink i{font-style:normal;color:var(--mut)}
+
+/* 틸트 · 상담사 */
+.tilt{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+.tilt b{font-family:var(--mono);font-size:34px;line-height:1}
+.tilt span{font-weight:700}
+.tilt.calm b,.tilt.calm span{color:var(--up)}.tilt.warm b,.tilt.warm span{color:#e8a33a}.tilt.hot b,.tilt.hot span{color:var(--dn)}
+.calm{display:flex;flex-direction:column;gap:3px;margin-top:12px;padding:11px 13px;border-radius:12px;background:var(--card2);font-size:13.5px}
+.calm b{margin-bottom:2px}
+.fsub{font-size:12.5px;font-weight:700;color:var(--mut);margin:12px 0 4px}.fsub:first-child{margin-top:0}
+.talk{display:flex;flex-direction:column;gap:8px;padding:4px 0 12px;min-height:40vh}
+.bub{max-width:86%;padding:10px 13px;border-radius:16px;font-size:14.5px;line-height:1.55;white-space:normal;word-break:break-word}
+.bub.as{align-self:flex-start;background:var(--card);border:1px solid var(--bd);border-bottom-left-radius:5px}
+.bub.me{align-self:flex-end;background:var(--ac);color:#fff;border-bottom-right-radius:5px}
+.bub.typing{opacity:.85}
+.talkBar{position:sticky;bottom:calc(64px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:flex-end;padding:8px 0;background:var(--bg)}
+.talkBar textarea{flex:1;min-height:46px;max-height:140px;resize:vertical}
+.talkBar button{min-height:46px}
+.tkNote{margin-top:6px}.tkNote button{padding:2px 6px;min-height:0}
+.talkTxt{white-space:pre-wrap}

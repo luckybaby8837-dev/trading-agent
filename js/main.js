@@ -118,6 +118,7 @@
     if (v === "vTRisk") renderRisk();
     if (v === "vTMind") renderMind();
     if (v === "vTData") renderData();
+    if (v === "vTTalk") renderTalk();
     if (v === "vAcct") renderAcct();
     if (v !== "vChart") stopTool();
   }
@@ -619,6 +620,8 @@
         <label>기준 시간봉</label><div class="chips" id="bTf"></div>
         <label for="bWhy">한 줄 메모</label><textarea id="bWhy" rows="2" placeholder="예: 4시간 채널 하단 + RSI 다이버전스">${esc(t.why || "")}</textarea>
         <label>지금 심리</label><div class="chips" id="bMood"></div>
+        <label>감정 세기</label><div class="chips" id="bLv"></div>
+        <div class="row" style="margin-top:0"><div><label>잠</label><div class="chips" id="bSleep"></div></div><div><label>잃은 걸 되찾고 싶은 마음</label><div class="chips" id="bChase"></div></div></div>
         ${chartOk ? `<p class="mut sm" id="bShotNote" style="margin:12px 0 0">📷 저장하면 고른 시간봉 차트(그린 선 · 진입선 포함)가 <b>매매 기록과 일지에 자동으로</b> 들어가요.</p>` : ""}
       </div>
       <button class="primary" id="bSave" style="width:100%;min-height:50px">저장</button>`);
@@ -628,9 +631,14 @@
     chips($("bTf"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), [tf], false);
     $("bTf").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (tf = b.dataset.v)));
     const getM = chips($("bMood"), MOODS, t.mood || [], true);
+    const feel = Object.assign({ lv: "", sleep: "", chase: "" }, t.feel || {});
+    const one = (el, items, k) => { chips(el, items, [String(feel[k])], false); el.querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (feel[k] = b.dataset.v))); };
+    one($("bLv"), [["1 잔잔", "1"], ["2", "2"], ["3 보통", "3"], ["4", "4"], ["5 매우 셈", "5"]], "lv");
+    one($("bSleep"), [["잘 잠", "충분"], ["부족", "부족"]], "sleep");
+    one($("bChase"), [["없음", "없음"], ["조금", "조금"], ["강함", "강함"]], "chase");
     $("bSave").onclick = async () => {
       $("bSave").disabled = true; $("bSave").textContent = "저장하는 중…";
-      Object.assign(t, { basis: getB(), tf, why: $("bWhy").value.trim(), mood: getM() });
+      Object.assign(t, { basis: getB(), tf, why: $("bWhy").value.trim(), mood: getM(), feel });
       const shot = chartOk ? await captureEntry(t) : null;
       await Store.put("trades", t); await loadData(); closeSheet(); renderHome(); renderTrades();
       toast(shot ? `진입 근거 저장 · ${Market.TF[tf].name} 차트를 일지에 넣었어요` : "진입 근거를 저장했어요");
@@ -760,7 +768,7 @@
       $("jMsg").textContent = "";
     }
     const items = [
-      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge spot">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge ${j.kind === "talk" ? "open" : "spot"}">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p${j.kind === "talk" ? ' class="talkTxt"' : ""}>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
@@ -1118,6 +1126,8 @@
     if (last && now >= last.ts && now - last.ts < MIND.cool * 60e3) out.push({ lv: "warn", text: `손절 ${Math.max(1, Math.round((now - last.ts) / 60e3))}분 전 · ${MIND.cool}분은 쉬어 가요 (복수 매매 주의)` });
     const s = lossStreak();
     if (s.n >= MIND.streak) out.push(s.last === today() ? { lv: "warn", text: `${s.n}연속 손절 · 오늘은 여기까지가 좋아요` } : { lv: "info", text: `최근 ${s.n}연속 손절 · 다음 진입은 한 번 더 확인해요` });
+    const tl = tiltScore();
+    if (tl.v >= 60) out.unshift({ lv: "warn", text: `틸트 ${tl.v}점 · 감정이 많이 흔들려요, 오늘은 쉬어 가요` });
     const n = entries(today()).filter((e) => e.t.date === today()).length;
     if (n >= MIND.perDay) out.push({ lv: "warn", text: `오늘 진입 ${n}번 · 과매매 주의` });
     const noBasis = st.trades.filter((t) => t.status === "open" && !(t.basis && t.basis.length) && !t.why);
@@ -1125,6 +1135,38 @@
     if (!st.journal.some((j) => j.date === today() && j.kind === "diary")) out.push({ lv: "info", text: "오늘 일지를 아직 안 썼어요", go: "journal" });
     return out;
   }
+
+  // 틸트 점수 (0~100): 선물 계좌를 망가뜨리는 감정 신호를 묶어서 셈
+  const HOT_MOODS = ["복수심", "조급함", "욕심", "불안", "두려움"];
+  function tiltScore() {
+    const parts = [], now = Date.now(), add = (v, why) => { if (v > 0) parts.push({ v: Math.round(v), why }); };
+    const s = lossStreak(); if (s.n >= 1 && s.last >= daysAgo(1)) add(Math.min(30, s.n * 10), `연속 손절 ${s.n}번`);
+    const last = lossCloses().sort((a, b) => b.ts - a.ts)[0];
+    if (last && now >= last.ts) { const m = (now - last.ts) / 60e3; if (m < MIND.cool) add(20, `손절한 지 ${Math.max(1, Math.round(m))}분`); else if (m < 120) add(10, `손절한 지 ${Math.round(m)}분`); }
+    const td = entries(today()).filter((e) => e.t.date === today());
+    if (td.length >= 3) add(Math.min(24, (td.length - 2) * 8), `오늘 진입 ${td.length}번`);
+    if (td.some((e) => e.t.time && +e.t.time.slice(0, 2) < 6)) add(10, "새벽 매매");
+    // 손실 뒤 크기·레버리지를 키웠는지 (가장 최근 진입 vs 그 전 손실 진입)
+    const rec = entries(daysAgo(2)).filter((e) => entryTs(e.t)).sort((a, b) => entryTs(b.t) - entryTs(a.t)), cur = rec[0];
+    if (cur && now - entryTs(cur.t) < 24 * 36e5) {
+      const pl = rec.slice(1).find((e) => e.closed && e.pl != null && e.pl < 0);
+      if (pl) {
+        const nv = (e) => e.list.reduce((a, x) => a + (x.en || 0) * (x.qty || 0), 0), r = nv(pl) ? nv(cur) / nv(pl) : 0;
+        if (r >= 1.3) add(20, `손실 뒤 크기를 ${r.toFixed(1)}배로 키움`);
+        if (pl.t.lev && cur.t.lev > pl.t.lev) add(10, `손실 뒤 레버리지 ${pl.t.lev}→${cur.t.lev}배`);
+      }
+    }
+    const eq = futEq(), c = riskCfg(); if (eq) { const dl = -todayFutPnl() / eq * 100; if (dl > 0) add(Math.min(20, dl / c.day * 20), `오늘 손실 −${dl.toFixed(1)}%`); }
+    const op = st.trades.filter((t) => t.status === "open"), fs = op.map((t) => t.feel || {});
+    if (fs.some((f) => f.chase === "강함")) add(15, "되찾고 싶은 마음 강함"); else if (fs.some((f) => f.chase === "조금")) add(7, "되찾고 싶은 마음 조금");
+    if (fs.some((f) => f.sleep === "부족")) add(5, "잠 부족");
+    if (fs.some((f) => +f.lv >= 4)) add(5, "감정이 셈");
+    const hm = [...new Set(op.flatMap((t) => t.mood || []).filter((m) => HOT_MOODS.includes(m)))];
+    if (hm.length) add(10, `진입 심리: ${hm.join(", ")}`);
+    const v = Math.min(100, parts.reduce((a, p) => a + p.v, 0));
+    return { v, parts: parts.sort((a, b) => b.v - a.v), lv: v >= 60 ? "hot" : v >= 30 ? "warm" : "calm" };
+  }
+  const CALM = ["차트를 끄고 5분 걷기", "물 한 잔 마시고 숨을 천천히 10번 쉬기", "방금 손절한 이유를 한 줄로 적기", "다음 진입 조건을 미리 적어 두고 그때까지 기다리기", "오늘 손실 한도까지 남은 금액 확인하기", "상담사에게 지금 마음 털어놓기"];
 
   // ---------- 리스크 매니저 (거부권) ----------
   const RISK_DEF = { per: 3, day: 8, lev: 20 };
@@ -1203,6 +1245,7 @@
   const TEAMS = [
     { id: "vTRisk", name: "🛡 리스크 매니저", role: "손절 · 수량 · 레버리지 · 하루 손실 한도 · 거부권", sum: () => { const r = riskChecks(); if (r.length) return r[0].text + (r.length > 1 ? ` 외 ${r.length - 1}건` : ""); const eq = futEq(), c = riskCfg(); return eq ? `이상 없음 · 오늘 손실 여유 ${Math.max(0, c.day + todayFutPnl() / eq * 100).toFixed(1)}%` : "바이비트 자산을 알면 % 기준으로 심사해요"; }, warn: () => riskChecks().length > 0 },
     { id: "vTMind", name: "🧠 심리 코치", role: "복수 매매 · 연속 손절 · 과매매 · 근거 없는 진입", sum: () => { const w = mindChecks().filter((x) => x.lv === "warn"); return w.length ? w[0].text + (w.length > 1 ? ` 외 ${w.length - 1}건` : "") : "지금은 차분해요"; }, warn: () => mindChecks().some((x) => x.lv === "warn") },
+    { id: "vTTalk", name: "🛋 상담사", role: "내 이야기를 들어주는 대화 상대", sum: () => { const t = tiltScore(); return Counsel.hasKey() ? (t.v >= 30 ? `틸트 ${t.v}점 · 이야기 나눠 볼까요?` : "언제든 털어놓으세요") : "Claude API 열쇠를 넣으면 대화할 수 있어요"; } },
     { id: "vTData", name: "📊 데이터 분석가", role: "근거 · 시간봉 · 요일 · 시간대 · 심리별 성과", sum: () => { const es = entries(daysAgo(89)).filter((e) => e.closed && e.pl != null && e.cd >= daysAgo(89)); const w = es.filter((e) => e.pl > 0).length; return es.length ? `최근 90일 ${es.length}건 · 승률 ${Math.round(w / es.length * 100)}%` : "종료한 매매가 쌓이면 성과를 나눠 보여줘요"; } },
   ];
   function renderTeamList() {
@@ -1307,8 +1350,38 @@
     $("mcNow").innerHTML = chkHtml(mindChecks(), "지금은 차분해요 · 계획대로 가요");
     $("mcNow").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => { const v = b.dataset.go === "home" ? "vHome" : "vJournal"; lastTab = v; showView(v); if (v === "vJournal") renderJournal(); });
   }
+  function renderTilt() {
+    const t = tiltScore(), word = { calm: "차분해요", warm: "조금 흔들려요", hot: "많이 흔들려요 (틸트)" }[t.lv];
+    const tips = t.lv === "calm" ? [] : CALM.slice(t.lv === "hot" ? 0 : 1, t.lv === "hot" ? 6 : 4);
+    $("mcTilt").innerHTML = `<div class="tilt ${t.lv}"><b>${t.v}</b><span>${word}</span></div>
+      <div class="wprog ${t.lv === "hot" ? "bad" : ""}"><div class="wbar"><i style="width:${t.v}%"></i></div></div>
+      ${t.parts.length ? `<div class="kv" style="margin-top:10px">${t.parts.map((p) => `<span>${esc(p.why)}</span><b>+${p.v}</b>`).join("")}</div>` : `<p class="mut sm" style="margin-bottom:0">흔들리는 신호가 없어요. 이 마음 그대로 계획대로 가요.</p>`}
+      ${tips.length ? `<div class="calm"><b>지금 해 볼 것</b>${tips.map((x) => `<span>· ${esc(x)}</span>`).join("")}</div>` : ""}
+      <button class="${t.lv === "calm" ? "" : "primary"}" id="mcTalk" style="width:100%;margin-top:12px">🛋 상담사와 이야기하기</button>
+      <p class="mut sm" style="margin-bottom:0">30점 이상이면 주의, 60점 이상이면 틸트예요. 진입 근거를 적을 때 감정 세기·잠·되찾고 싶은 마음을 고르면 더 정확해져요.</p>`;
+    $("mcTalk").onclick = () => showView("vTTalk");
+  }
+  function statRows(es, fn) {
+    const m = new Map();
+    for (const e of es) for (const k of fn(e)) { const o = m.get(k) || { n: 0, w: 0, pl: 0 }; o.n++; if (e.pl > 0) o.w++; o.pl += e.pl; m.set(k, o); }
+    return [...m.entries()].sort((a, b) => b[1].n - a[1].n);
+  }
+  function renderFeel() {
+    const from = daysAgo(89), es = entries(from).filter((e) => e.closed && e.pl != null && e.cd >= from);
+    const sets = [
+      ["진입 때 심리", (e) => e.b.mood || []],
+      ["감정 세기", (e) => (e.b.feel && e.b.feel.lv ? [`세기 ${e.b.feel.lv}`] : [])],
+      ["잠", (e) => (e.b.feel && e.b.feel.sleep ? [e.b.feel.sleep === "부족" ? "잠 부족" : "잘 잠"] : [])],
+      ["되찾고 싶은 마음", (e) => (e.b.feel && e.b.feel.chase ? [e.b.feel.chase] : [])],
+    ];
+    const html = sets.map(([name, fn]) => {
+      const rows = statRows(es, fn); if (!rows.length) return "";
+      return `<div class="fsub">${name}</div><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${Math.round(o.w / o.n * 100)}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td></tr>`).join("")}</table>`;
+    }).join("");
+    $("mcFeel").innerHTML = html || `<div class="empty">진입 근거를 적을 때 심리·감정을 골라 두면,<br>어떤 마음일 때 결과가 좋았는지 여기서 보여줘요.</div>`;
+  }
   function renderMind() {
-    renderMindNow();
+    renderTilt(); renderMindNow(); renderFeel();
     const from = daysAgo(29), es = entries(from).filter((e) => e.t.date >= from);
     const done = es.filter((e) => e.closed && e.pl != null);
     const st2 = (arr) => { const n = arr.length, w = arr.filter((e) => e.pl > 0).length, pl = arr.reduce((a, e) => a + e.pl, 0); return n ? `${n}건 · 승률 ${Math.round(w / n * 100)}% · <b class="${sgn(pl)}">${usdS(pl)}</b>` : "없음"; };
@@ -1402,10 +1475,92 @@
         + (t.notes || []).map((n) => `\n  포지션 중 생각 (${n.d} ${n.tm}): ${n.text}`).join(""));
     }
     lines.push("", `[일지·메모 ${jr.length}개]`);
-    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
+    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
     return lines.join("\n");
   }
   $("taCopy").onclick = () => copyText(auditText(taDays), `최근 ${taDays}일 복기 자료를 복사했어요`);
+
+  // ---------- 상담사 ----------
+  let talk = null, talking = false;
+  function talkContext() {
+    const t = tiltScore(), w = weekStats(7), td = today(), L = [];
+    L.push(`오늘 ${td} ${nowHM()} · 틸트 점수 ${t.v}/100${t.parts.length ? ` (${t.parts.map((p) => p.why).join(", ")})` : ""}`);
+    L.push(`최근 7일: 종료 ${w.n}건, 수익 ${w.wins}건, 손익 ${w.pl == null ? "모름" : (w.pl >= 0 ? "+" : "") + w.pl.toFixed(0) + "달러"}, 자주 나온 심리 ${w.top.join(", ") || "없음"}`);
+    const s = lossStreak(); if (s.n) L.push(`최근 연속 손절 ${s.n}번 (마지막 ${s.last})`);
+    const op = st.trades.filter((x) => x.status === "open");
+    for (const x of op) L.push(`진행 중: ${x.coin} ${sideName[x.side]} ${x.lev ? x.lev + "배 " : ""}진입 ${x.date}${x.why ? ` · 근거 "${x.why}"` : ""}${(x.mood || []).length ? ` · 심리 ${x.mood.join(", ")}` : ""}${x.feel && x.feel.chase ? ` · 되찾고 싶은 마음 ${x.feel.chase}` : ""}${(x.notes || []).length ? ` · 생각 "${x.notes[x.notes.length - 1].text}"` : ""}`);
+    const recent = closedSorted().slice(0, 6);
+    for (const x of recent) { const p = realPnl(x); L.push(`최근 청산: ${x.closeDate || x.date} ${x.coin} ${sideName[x.side]} ${p == null ? "" : (p >= 0 ? "+" : "") + p.toFixed(0) + (curOf(x) === "KRW" ? "원" : "달러")}${x.lesson ? ` · 남긴 생각 "${x.lesson}"` : ""}`); }
+    const js = st.journal.filter((j) => j.kind !== "shot" && j.kind !== "talk" && j.date >= daysAgo(6)).slice(0, 8);
+    for (const j of js) L.push(`일지 ${j.date}${(j.mood || []).length ? ` (${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\s+/g, " ").slice(0, 200)}`);
+    const past = st.journal.filter((j) => j.kind === "talk" && (!talk || j.id !== talk.id)).slice(0, 2);
+    for (const j of past) L.push(`지난 상담 ${j.date} 일부: ${(j.text || "").replace(/\s+/g, " ").slice(-400)}`);
+    return L.join("\n");
+  }
+  const talkText = (msgs) => msgs.map((m) => `${m.role === "user" ? "나" : "상담사"}: ${m.content}`).join("\n");
+  async function saveTalk() {
+    if (!talk || !talk.msgs.length) return;
+    const old = st.journal.find((j) => j.id === talk.id);
+    await Store.put("journal", Object.assign(old || { id: talk.id, kind: "talk", date: talk.date, time: talk.time, mood: [] }, { text: talkText(talk.msgs), msgs: talk.msgs, ctx: talk.ctx }));
+    await loadData();
+  }
+  function startTalk(resume) {
+    const td = today(), prev = resume ? st.journal.find((j) => j.kind === "talk" && j.date === td && Array.isArray(j.msgs)) : null;
+    talk = prev ? { id: prev.id, date: prev.date, time: prev.time, msgs: prev.msgs.slice(), ctx: prev.ctx || talkContext() }
+      : { id: "talk_" + Date.now().toString(36), date: td, time: nowHM(), msgs: [], ctx: null };
+    if (!talk.ctx) talk.ctx = talkContext();
+  }
+  function talkHello() {
+    const t = tiltScore();
+    if (t.lv === "hot") return "오늘 많이 힘드셨던 것 같아요. 지금 마음이 어떤지, 생각나는 대로 편하게 말해 주세요. 천천히 들을게요.";
+    if (t.lv === "warm") return "조금 마음이 흔들리는 날 같아요. 지금 어떤 기분인지 들려줄래요?";
+    return "안녕하세요. 오늘 하루, 그리고 매매하면서 어떤 마음이었는지 편하게 이야기해 주세요.";
+  }
+  function drawTalk(streamText) {
+    const msgs = talk ? talk.msgs : [];
+    const bub = (role, text, cls = "") => `<div class="bub ${role}${cls}">${esc(text).replace(/\n/g, "<br>")}</div>`;
+    $("tkLog").innerHTML = bub("as", talkHello()) + msgs.map((m) => bub(m.role === "user" ? "me" : "as", m.content)).join("")
+      + (streamText != null ? bub("as", streamText || "…", " typing") : "");
+    $("tkLog").lastElementChild.scrollIntoView({ block: "end" });
+  }
+  function talkSetup(show) {
+    $("tkSetup").hidden = !show;
+    if (show) { $("tkKey").value = ""; setTimeout(() => $("tkKey").focus(), 50); }
+  }
+  function renderTalk() {
+    if (!talk) startTalk(true);
+    talkSetup(!Counsel.hasKey());
+    drawTalk();
+  }
+  $("tkKeySave").onclick = () => {
+    const k = $("tkKey").value.trim();
+    if (!/^sk-ant-/.test(k)) { toast("sk-ant- 로 시작하는 열쇠를 넣어 주세요"); return; }
+    Counsel.setKey(k); $("tkKey").value = ""; talkSetup(false); toast("상담사를 연결했어요");
+  };
+  $("tkKeyCancel").onclick = () => talkSetup(false);
+  $("tkKeyEdit").onclick = () => talkSetup(true);
+  $("tkNew").onclick = () => { if (talking) return; startTalk(false); drawTalk(); $("tkIn").focus(); };
+  async function sendTalk() {
+    const text = $("tkIn").value.trim();
+    if (!text || talking) return;
+    if (!Counsel.hasKey()) { talkSetup(true); return; }
+    if (!talk) startTalk(true);
+    talk.msgs.push({ role: "user", content: text }); $("tkIn").value = "";
+    talking = true; $("tkSend").disabled = true;
+    let acc = ""; drawTalk("");
+    try {
+      const r = await Counsel.reply(talk.ctx, talk.msgs, (d) => { acc += d; drawTalk(acc); });
+      const out = r.refusal && !r.text ? "이 이야기에는 제가 답하기 어려워요. 다른 방식으로 말해 주시겠어요? 많이 힘드시면 109나 1577-0199에 연락해 주세요." : r.text;
+      talk.msgs.push({ role: "assistant", content: out });
+      await saveTalk();
+    } catch (e) {
+      talk.msgs.pop(); $("tkIn").value = text;
+      if (e.code === "nokey") talkSetup(true);
+      toast(e.message);
+    } finally { talking = false; $("tkSend").disabled = false; drawTalk(); }
+  }
+  $("tkSend").onclick = sendTalk;
+  $("tkIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendTalk(); } });
 
   // 홈: 팀 소식 (확인할 것이 있을 때만)
   function renderNews() {
@@ -1593,7 +1748,7 @@
     loadFx(); setInterval(loadFx, 6 * 3600e3);
     pollUpbit(); setInterval(pollUpbit, 4000);
     await loadChart();
-    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) { renderOpen(); renderNews(); } if ($("vTeam").classList.contains("on")) renderTeamList(); if ($("vTRisk").classList.contains("on")) renderRiskLive(); if ($("vTMind").classList.contains("on")) renderMindNow(); }, 3000);
+    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) { renderOpen(); renderNews(); } if ($("vTeam").classList.contains("on")) renderTeamList(); if ($("vTRisk").classList.contains("on")) renderRiskLive(); if ($("vTMind").classList.contains("on")) { renderMindNow(); renderTilt(); } }, 3000);
   })();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => Chart.retheme());
   if ("serviceWorker" in navigator && location.protocol !== "file:") {

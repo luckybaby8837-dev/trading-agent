@@ -96,12 +96,29 @@
   <section id="vTMind" class="view">
     <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🧠 심리 코치</h2></div>
     <p class="mut sm role">감정 매매 신호를 알려줘요 · <b>경고만</b> 하고 판단은 내가 해요</p>
+    <div class="card"><h3>틸트 점수 <small class="mut">감정이 흔들린 정도</small></h3><div id="mcTilt"></div></div>
     <div class="card"><h3>지금</h3><div id="mcNow"></div></div>
+    <div class="card"><h3>감정 × 결과 <small class="mut">최근 90일</small></h3><div id="mcFeel"></div></div>
     <div class="card"><h3>최근 30일 패턴</h3><div id="mcPat"></div></div>
     <div class="card"><h3>최근 7일</h3><div id="taWeek"></div></div>
     <div class="card"><h3>복기 자료</h3><p class="mut sm" style="margin-top:0">기간 안의 매매(근거·손절·익절·결과·심리)와 일지를 묶어서 복사해요.</p>
       <div class="seg" id="taRange"></div>
       <div class="row"><button class="primary" id="taCopy">복기 자료 복사</button><button id="taClaude">Claude 열기</button></div></div>
+  </section>
+
+  <!-- 상담사 -->
+  <section id="vTTalk" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛋 상담사</h2><button class="ghost sm" id="tkNew" style="margin-left:auto">새 대화</button></div>
+    <p class="mut sm role">내 이야기를 들어줘요 · 매매 기록과 심리를 알고 대화해요</p>
+    <div class="card" id="tkSetup" hidden>
+      <h3>상담사 연결</h3>
+      <p class="mut sm" style="margin-top:0">Claude API 열쇠가 필요해요. <b>console.anthropic.com</b> → API Keys에서 만들고 크레딧을 충전한 뒤 아래에 넣어 주세요. 열쇠는 <b>이 기기에만</b> 저장돼요 (다른 기기와 동기화 안 함). 쓴 만큼 요금이 나와요.</p>
+      <label for="tkKey">API 열쇠</label><input id="tkKey" type="password" autocomplete="off" placeholder="sk-ant-...">
+      <div class="row"><button class="primary" id="tkKeySave">저장</button><button id="tkKeyCancel">취소</button></div>
+    </div>
+    <div class="talk" id="tkLog"></div>
+    <div class="talkBar"><textarea id="tkIn" rows="2" placeholder="지금 마음을 편하게 적어 보세요"></textarea><button class="primary" id="tkSend">보내기</button></div>
+    <p class="mut sm tkNote">대화와 매매 요약이 Claude(Anthropic)로 보내져요. 전문 상담·치료를 대신하지 않아요. 많이 힘들 땐 자살예방상담 <b>109</b> · 정신건강위기상담 <b>1577-0199</b> · 도박문제 상담 <b>1336</b>. <button class="ghost sm" id="tkKeyEdit">열쇠 바꾸기</button></p>
   </section>
 
   <!-- 데이터 분석가 -->
@@ -234,6 +251,7 @@
 <script src="js/chart.js"></script>
 <script src="js/analysis.js"></script>
 <script src="js/markup.js"></script>
+<script src="js/counsel.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>
