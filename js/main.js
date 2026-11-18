@@ -19,8 +19,26 @@
 
   // ---------- 공통 UI ----------
   function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.h); toast.h = setTimeout(() => (t.hidden = true), 2200); }
-  function sheet(html) { $("sheetIn").innerHTML = html; $("sheet").hidden = $("sheetBg").hidden = false; $("sheet").scrollTop = 0; }
-  function closeSheet() { $("sheet").hidden = $("sheetBg").hidden = true; $("sheetIn").innerHTML = ""; }
+  // 폰 뒤로가기: 팝업·하위 화면을 하나씩 닫고, 앱은 나가지 않게
+  let layers = [], ignorePop = 0;
+  const pushLayer = (l) => { layers.push(l); history.pushState({ ta: layers.length }, ""); };
+  addEventListener("popstate", () => {
+    if (ignorePop) { ignorePop--; return; }
+    const l = layers.pop();
+    if (!l) return;
+    if (l.type === "sheet") hideSheet();
+    else showView(l.back, true);
+  });
+  function hideSheet() { $("sheet").hidden = $("sheetBg").hidden = true; $("sheetIn").innerHTML = ""; }
+  function sheet(html) {
+    if ($("sheet").hidden) pushLayer({ type: "sheet" });
+    $("sheetIn").innerHTML = html; $("sheet").hidden = $("sheetBg").hidden = false; $("sheet").scrollTop = 0;
+  }
+  function closeSheet() {
+    if ($("sheet").hidden) return;
+    hideSheet();
+    if (layers.length && layers[layers.length - 1].type === "sheet") { layers.pop(); ignorePop++; history.back(); }
+  }
   $("sheetBg").onclick = closeSheet;
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("sheet").hidden) closeSheet(); });
   function seg(box, opts, cur, cb) {
@@ -80,7 +98,13 @@
 
   // ---------- 탭 ----------
   let lastTab = "vHome";
-  function showView(v) {
+  const isSub = (v) => v === "vSet" || v === "vAcct" || /^vT[A-Z]/.test(v);
+  function showView(v, fromBack) {
+    const cur = document.body.dataset.v;
+    if (!fromBack && v !== cur) {
+      if (isSub(v)) pushLayer({ type: "view", back: cur || "vHome" });
+      else layers = layers.filter((l) => l.type !== "view");
+    }
     const tabV = /^vT[A-Z]/.test(v) || v === "vAcct" ? "vTeam" : v;
     document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === tabV));
     document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
@@ -97,7 +121,12 @@
     if (v !== "vChart") stopTool();
   }
   $("setBtn").onclick = () => showView("vSet");
-  $("setX").onclick = () => showView(lastTab);
+  // 화면 안의 닫기·‹ 버튼도 뒤로가기와 똑같이
+  function goBack(fallback) {
+    const l = layers.length && layers[layers.length - 1];
+    if (l && l.type === "view") { layers.pop(); ignorePop++; history.back(); showView(l.back, true); } else showView(fallback);
+  }
+  $("setX").onclick = () => goBack(lastTab);
   document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
     lastTab = b.dataset.v; showView(b.dataset.v);
     if (b.dataset.v === "vTrade") renderTrades();
@@ -765,7 +794,7 @@
       <div class="tsum">${esc(t.sum())}</div></div>`).join("");
     $("teamList").querySelectorAll(".item").forEach((el) => el.onclick = () => { const t = TEAMS[el.dataset.i]; if (t.id) showView(t.id); });
   }
-  document.querySelectorAll("[data-back]").forEach((b) => b.onclick = () => showView(b.dataset.back));
+  document.querySelectorAll("[data-back]").forEach((b) => b.onclick = () => goBack(b.dataset.back));
 
   function renderTChart() {
     const s = basisStats();
