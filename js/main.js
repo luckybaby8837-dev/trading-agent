@@ -81,13 +81,19 @@
   // ---------- 탭 ----------
   let lastTab = "vHome";
   function showView(v) {
-    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === v));
+    const tabV = /^vT[A-Z]/.test(v) || v === "vAcct" ? "vTeam" : v;
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === tabV));
     document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
     document.body.dataset.v = v;
     scrollTo(0, 0);
     if (v === "vChart") fitChartView();
     if (v === "vHome") renderHome();
     if (v === "vSet") renderSet();
+    if (v === "vTeam") renderTeamList();
+    if (v === "vTChart") renderTChart();
+    if (v === "vTTrend") renderTTrend();
+    if (v === "vTAudit") renderTAudit();
+    if (v === "vAcct") renderAcct();
     if (v !== "vChart") stopTool();
   }
   $("setBtn").onclick = () => showView("vSet");
@@ -105,6 +111,8 @@
     const o = (st.tick[sym] = st.tick[sym] || {});
     if (d.lastPrice) o.last = +d.lastPrice;
     if (d.price24hPcnt) o.chg = +d.price24hPcnt * 100;
+    if (d.fundingRate) o.fr = +d.fundingRate;
+    if (d.openInterestValue) o.oi = +d.openInterestValue;
     if (sym === st.coin) renderTop();
     liveDot(); homeSoon();
   });
@@ -581,7 +589,7 @@
     // 바이비트 자동 잔고에는 미실현이 이미 들어 있음. 손으로 넣은 값엔 더해 줌
     const eqShow = eq == null ? null : eq + (bbAuto ? 0 : un);
     const base = eqShow == null ? 0 : eqShow - un;
-    const pc = (x, b) => (b > 0 ? `${x >= 0 ? "+" : "−"}${Math.abs(x / b * 100).toFixed(1)}%` : "");
+    const pc = (x, b) => (eqShow != null && b > 0 ? `${x >= 0 ? "+" : "−"}${Math.abs(x / b * 100).toFixed(1)}%` : "");
     const sym = cur === "KRW" ? "₩" : "$";
     const num = (v) => fmtC(Math.abs(v)).slice(1);
     $("hHero").innerHTML = `<div class="hl">현재 자산</div>`
@@ -618,7 +626,7 @@
   }
   function renderHome() {
     $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
-    renderHero(); renderTicks(); renderOpen();
+    renderHero(); renderNews(); renderTicks(); renderOpen();
   }
   let hT = 0;
   function homeSoon() { if (hT || !$("vHome").classList.contains("on") || document.hidden) return; hT = setTimeout(() => { hT = 0; renderHero(); renderTicks(); }, 1000); }
@@ -630,6 +638,175 @@
   }
   $("asBybit").oninput = () => Store.pref.set("asBybit", $("asBybit").value);
   $("asUpbit").oninput = () => Store.pref.set("asUpbit", $("asUpbit").value);
+
+  // ---------- 팀 ----------
+  const usdOf = (v, c) => (c === "USD" ? v : st.fx ? v / st.fx.rate : null);
+  const pnlOf = (t) => t.pnl ?? tradePnl(t);
+  const closedSorted = () => st.trades.filter((t) => t.status === "closed").sort((a, b) => ((b.closeDate || b.date) + (b.time || "")).localeCompare((a.closeDate || a.date) + (a.time || "")));
+  const daysAgo = (n) => { const d = new Date(Date.now() - n * 864e5); return new Date(d - d.getTimezoneOffset() * 60e3).toISOString().slice(0, 10); };
+
+  // 감사팀 점검 (자동 계산 · 기준값은 바꿀 수 있음)
+  const AUDIT = { lossStreak: 2, tradesPerDay: 4 };
+  function auditChecks() {
+    const out = [], open = st.trades.filter((t) => t.status === "open");
+    const noBasis = open.filter((t) => !(t.basis && t.basis.length) && !t.why);
+    if (noBasis.length) out.push({ lv: "warn", text: `근거 미입력 포지션 ${noBasis.length}건`, go: "home" });
+    const noSl = open.filter((t) => t.venue !== "upbit" && !t.sl);
+    if (noSl.length) out.push({ lv: "warn", text: `손절가 없는 포지션 ${noSl.length}건 (${noSl.map((t) => t.coin).join(", ")})` });
+    let streak = 0; for (const t of closedSorted()) { const p = pnlOf(t); if (p == null) continue; if (p < 0) streak++; else break; }
+    if (streak >= AUDIT.lossStreak) out.push({ lv: "warn", text: `${streak}연속 손실 · 복수매매 주의` });
+    const td = today(), nToday = st.trades.filter((t) => t.date === td).length;
+    if (nToday >= AUDIT.tradesPerDay) out.push({ lv: "warn", text: `오늘 진입 ${nToday}번 · 과매매 주의` });
+    const diary = st.journal.some((j) => j.date === td && j.kind === "diary");
+    if (!diary) out.push({ lv: "info", text: "오늘 일지를 아직 안 썼어요", go: "journal" });
+    return { list: out, streak };
+  }
+  function weekStats(n = 7) {
+    const from = daysAgo(n - 1), cl = st.trades.filter((t) => t.status === "closed" && (t.closeDate || t.date) >= from);
+    let pl = 0, wins = 0, ok = true;
+    for (const t of cl) { const p = pnlOf(t); if (p == null) continue; if (p > 0) wins++; const u = usdOf(p, curOf(t)); if (u == null) ok = false; else pl += u; }
+    const opened = st.trades.filter((t) => t.date >= from);
+    const withBasis = opened.filter((t) => (t.basis && t.basis.length) || t.why).length;
+    const moods = {}; for (const t of opened) for (const m of t.mood || []) moods[m] = (moods[m] || 0) + 1;
+    for (const j of st.journal.filter((j) => j.date >= from)) for (const m of j.mood || []) moods[m] = (moods[m] || 0) + 1;
+    const top = Object.entries(moods).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, c]) => `${m} ${c}`);
+    return { n: cl.length, wins, pl: ok ? pl : null, opened: opened.length, withBasis, top };
+  }
+  // 차트분석팀: 근거 칩별 성과
+  function basisStats() {
+    const m = {};
+    for (const t of st.trades.filter((t) => t.status === "closed")) {
+      const p = pnlOf(t); if (p == null) continue; const u = usdOf(p, curOf(t)); if (u == null) continue;
+      for (const b of t.basis || []) { const o = (m[b] = m[b] || { n: 0, w: 0, pl: 0 }); o.n++; if (p > 0) o.w++; o.pl += u; }
+    }
+    return Object.entries(m).map(([b, o]) => ({ b, ...o, rate: o.w / o.n })).sort((a, b) => b.n - a.n || b.rate - a.rate);
+  }
+  // 트렌드팀: 시장 온도
+  let lsr = {}, lsrAt = 0;
+  async function loadLsr() {
+    if (Date.now() - lsrAt < 5 * 60e3) return;
+    lsrAt = Date.now();
+    for (const c of Market.COINS) { const r = await Market.longShort(c); if (r) lsr[c] = r; }
+  }
+  const frS = (v) => (v == null ? "—" : (v * 100 >= 0 ? "+" : "") + (v * 100).toFixed(4) + "%");
+  const bigUsd = (v) => (v >= 1e9 ? "$" + (v / 1e9).toFixed(2) + "B" : v >= 1e6 ? "$" + (v / 1e6).toFixed(0) + "M" : usd(v, 0));
+  const FR = { hot: 0.0003, cold: -0.0001 };
+  function trendNews() {
+    const out = [];
+    for (const c of Market.COINS) {
+      const fr = st.tick[c] && st.tick[c].fr;
+      if (fr == null) continue;
+      if (fr >= FR.hot) out.push({ lv: "warn", text: `${c} 펀딩비 ${frS(fr)} · 롱 과열` });
+      else if (fr <= FR.cold) out.push({ lv: "warn", text: `${c} 펀딩비 ${frS(fr)} · 숏 과열` });
+    }
+    return out;
+  }
+
+  const TEAMS = [
+    { id: "vTChart", name: "차트분석팀", role: "차트 분석 · 패턴도감", sum: () => { const s = basisStats(); return s.length ? `근거 ${s.length}종 기록 · 가장 많이 쓴 근거 ${s[0].b}` : "근거를 적은 종료 매매가 쌓이면 성과가 보여요"; } },
+    { id: "vTTrend", name: "트렌드팀", role: "트렌드 · 시황·뉴스 · 온체인·고래", sum: () => { const t = st.tick.BTC || {}; return `BTC 펀딩 ${frS(t.fr)}${lsr.BTC ? ` · 롱 ${(lsr.BTC.buy * 100).toFixed(0)}%` : ""}`; } },
+    { id: "vTAudit", name: "감사팀", role: "감사 · 복기 · 심리관리", sum: () => { const w = auditChecks().list.filter((x) => x.lv === "warn").length; return w ? `확인할 것 ${w}건` : "지금은 이상 없음"; }, warn: () => auditChecks().list.some((x) => x.lv === "warn") },
+    { id: "vAcct", name: "회계팀", role: "회계 · 김프·환율", sum: () => { const k = kimp("BTC"); const m = sumPnl(st.trades.filter((t) => t.status === "closed" && (t.closeDate || t.date || "").startsWith(ymNow()))); return `이번 달 ${m == null ? "—" : sgC(m)} · 김프 ${k == null ? "—" : pctS(k)}`; } },
+    { id: null, name: "알림팀", role: "모든 팀 결과를 폰으로", sum: () => "알림 수단·시간이 정해지면 시작해요" },
+  ];
+  function renderTeamList() {
+    $("teamList").innerHTML = TEAMS.map((t, i) => `<div class="item team${t.id ? "" : " off"}" data-i="${i}">
+      <div class="l1"><b>${t.name}</b>${t.warn && t.warn() ? '<span class="badge warn">확인</span>' : t.id ? '<span class="mut">›</span>' : '<span class="badge spot">준비 중</span>'}</div>
+      <div class="l2"><span>${esc(t.role)}</span></div>
+      <div class="tsum">${esc(t.sum())}</div></div>`).join("");
+    $("teamList").querySelectorAll(".item").forEach((el) => el.onclick = () => { const t = TEAMS[el.dataset.i]; if (t.id) showView(t.id); });
+  }
+  document.querySelectorAll("[data-back]").forEach((b) => b.onclick = () => showView(b.dataset.back));
+
+  function renderTChart() {
+    const s = basisStats();
+    $("tcPat").innerHTML = s.length ? `<table><tr><th>근거</th><th>횟수</th><th>승률</th><th>손익($)</th></tr>${s.map((o) => `<tr><td>${esc(o.b)}</td><td>${o.n}</td><td>${Math.round(o.rate * 100)}%</td><td class="${sgn(o.pl)}">${usd(o.pl)}</td></tr>`).join("")}</table>`
+      : `<div class="empty">아직 근거를 적은 종료 매매가 없어요.<br>진행 중 포지션에 근거를 적어 두면, 청산 후 여기에 쌓여요.</div>`;
+    const open = st.trades.filter((t) => t.status === "open");
+    $("tcPos").innerHTML = open.length ? open.map((t) => `<div class="kvrow"><span><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b></span><span>${esc([...(t.basis || []), t.why].filter(Boolean).join(" · ") || "근거 미입력")}</span></div>`).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
+  }
+  $("tcGo").onclick = () => { lastTab = "vChart"; showView("vChart"); setTimeout(() => $("anaBtn").click(), 200); };
+
+  async function renderTTrend() {
+    const draw = () => {
+      $("ttBody").innerHTML = `<table><tr><th>종목</th><th>24시간</th><th>펀딩비</th><th>미결제약정</th><th>롱 : 숏</th></tr>${Market.COINS.map((c) => {
+        const t = st.tick[c] || {}, l = lsr[c];
+        return `<tr><td><b>${c}</b></td><td class="${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</td><td class="${t.fr >= FR.hot ? "up" : t.fr <= FR.cold ? "dn" : ""}">${frS(t.fr)}</td><td>${t.oi ? bigUsd(t.oi) : "—"}</td><td>${l ? `${(l.buy * 100).toFixed(0)} : ${(l.sell * 100).toFixed(0)}` : "—"}</td></tr>`;
+      }).join("")}</table>`;
+      const n = trendNews();
+      $("ttNote").textContent = n.length ? n.map((x) => x.text).join(" · ") : `펀딩비 ${frS(FR.hot)} 이상이면 롱 과열, ${frS(FR.cold)} 이하면 숏 과열로 표시해요.`;
+    };
+    draw(); await loadLsr(); draw();
+  }
+  async function trendText() {
+    await loadLsr();
+    const lines = [`트렌드팀 자료 · 기준 ${new Date().toLocaleString("ko-KR")}`,
+      "부탁: 매수/매도 지시 말고, 큰 흐름(주봉·일봉)과 시장 분위기(과열/공포 신호)를 정리해 주세요. 제 방식은 4시간봉 이상 스윙, 큰 추세 매매예요.", ""];
+    for (const c of Market.COINS) {
+      const t = st.tick[c] || {}, l = lsr[c], k = kimp(c);
+      lines.push(`[${c}USDT] 현재 ${price(c) ? Chart.fmtP(price(c)) : "—"} · 24시간 ${t.chg != null ? pctS(t.chg) : "—"} · 펀딩비 ${frS(t.fr)} · 미결제약정 ${t.oi ? bigUsd(t.oi) : "—"} · 롱:숏(계정 비율) ${l ? `${(l.buy * 100).toFixed(1)}:${(l.sell * 100).toFixed(1)}` : "—"} · 김프 ${k == null ? "—" : pctS(k)}`);
+      for (const [tf, n] of [["1w", 12], ["1d", 30]]) {
+        try {
+          const b = await Market.klines(c, tf, n);
+          lines.push(`- ${Market.TF[tf].name} 최근 ${b.length}봉 종가: ` + b.map((x) => Chart.fmtP(x.c)).join(", "));
+        } catch {}
+      }
+      lines.push("");
+    }
+    return lines.join("\n");
+  }
+  async function copyText(text, msg) { try { await navigator.clipboard.writeText(text); toast(msg); } catch { sheet(`<div class="sh"><h2>복사할 내용</h2><button class="ghost" id="shX">닫기</button></div><textarea class="anaText" readonly>${esc(text)}</textarea>`); $("shX").onclick = closeSheet; } }
+  $("ttCopy").onclick = async () => { $("ttCopy").disabled = true; copyText(await trendText(), "트렌드 자료를 복사했어요"); $("ttCopy").disabled = false; };
+  $("ttClaude").onclick = $("taClaude").onclick = () => window.open("https://claude.ai/new", "_blank", "noopener");
+
+  let taDays = 7;
+  seg($("taRange"), [["7일", 7], ["30일", 30], ["90일", 90]], taDays, (v) => (taDays = v));
+  function renderTAudit() {
+    const a = auditChecks();
+    $("taChecks").innerHTML = a.list.length ? a.list.map((x) => `<div class="chk ${x.lv}"><i>${x.lv === "warn" ? "!" : "i"}</i><span>${esc(x.text)}</span>${x.go ? `<button class="sm ghost" data-go="${x.go}">보기</button>` : ""}</div>`).join("")
+      : `<div class="chk ok"><i>✓</i><span>지금은 확인할 것이 없어요</span></div>`;
+    $("taChecks").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => { const v = b.dataset.go === "home" ? "vHome" : "vJournal"; lastTab = v; showView(v); if (v === "vJournal") renderJournal(); });
+    const w = weekStats(7);
+    $("taWeek").innerHTML = `<div class="kv"><span>종료한 매매</span><b>${w.n}건 · 수익 ${w.wins}건${w.n ? ` (${Math.round(w.wins / w.n * 100)}%)` : ""}</b>
+      <span>손익 (달러 환산)</span><b class="${sgn(w.pl || 0)}">${w.pl == null ? "—" : usd(w.pl)}</b>
+      <span>근거 기록</span><b>${w.opened ? `${w.withBasis} / ${w.opened}건` : "—"}</b>
+      <span>자주 나온 심리</span><b style="font-family:var(--font)">${esc(w.top.join(" · ") || "—")}</b></div>
+      <p class="mut sm" style="margin-bottom:0">점검 기준: 연속 손실 ${AUDIT.lossStreak}번 이상, 하루 진입 ${AUDIT.tradesPerDay}번 이상이면 알려 줘요.</p>`;
+  }
+  function auditText(n) {
+    const from = daysAgo(n - 1);
+    const tr = st.trades.filter((t) => (t.closeDate || t.date) >= from || t.date >= from).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+    const jr = st.journal.filter((j) => j.date >= from).sort((a, b) => (a.date + (a.time || "")).localeCompare(b.date + (b.time || "")));
+    const cur = (t) => (curOf(t) === "KRW" ? "원" : "$");
+    const lines = [`감사팀 복기 자료 · 최근 ${n}일 (${from} ~ ${today()})`,
+      "부탁: 매수/매도 지시 말고 점검만 해 주세요. ① 진입 근거가 실제로 맞았는지 ② 손절·익절 계획을 지켰는지 ③ 심리 패턴(연속 손실 뒤 무리한 진입, 복수매매, 과매매 등) ④ 다음에 지킬 것 1~3가지.",
+      "제 방식: 4시간봉 이상 스윙, 큰 추세 매매. 일목·볼린저·RSI·거래량, 직접 그은 평행채널·피보, 변곡 자리 캔들패턴, 파동을 봅니다.", "", `[매매 ${tr.length}건]`];
+    for (const t of tr) {
+      const p = t.status === "closed" ? pnlOf(t) : null;
+      lines.push(`- ${t.date} ${t.time || ""} ${venueName[t.venue]} ${t.coin} ${sideName[t.side]} · 진입 ${Chart.fmtP(t.en)}${t.qty ? ` × ${t.qty}` : ""}${t.lev ? ` · ${t.lev}배` : ""} · 손절 ${t.sl ? Chart.fmtP(t.sl) : "없음"} · 익절 ${t.tp ? Chart.fmtP(t.tp) : "없음"}`
+        + (t.status === "closed" ? ` → 청산 ${t.exit ? Chart.fmtP(t.exit) : "—"} (${t.closeDate || ""}) 손익 ${p == null ? "—" : (p >= 0 ? "+" : "") + p.toFixed(2) + cur(t)}${t.hit ? ` · 결과 ${t.hit}` : ""}` : " → 진행 중")
+        + `\n  근거: ${(t.basis || []).join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? ` / 메모: ${t.why}` : ""}`
+        + `${(t.mood || []).length || t.moodText ? `\n  진입 때 심리: ${(t.mood || []).join(", ")}${t.moodText ? " — " + t.moodText : ""}` : ""}`
+        + `${(t.closeMood || []).length ? `\n  청산 때 심리: ${t.closeMood.join(", ")}` : ""}${t.lesson ? `\n  청산 후 생각: ${t.lesson}` : ""}`);
+    }
+    lines.push("", `[일지·메모 ${jr.length}개]`);
+    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
+    return lines.join("\n");
+  }
+  $("taCopy").onclick = () => copyText(auditText(taDays), `최근 ${taDays}일 복기 자료를 복사했어요`);
+
+  // 홈: 팀 소식 (확인할 것이 있을 때만)
+  function renderNews() {
+    const items = [
+      ...auditChecks().list.filter((x) => x.lv === "warn").map((x) => ({ team: "감사팀", v: "vTAudit", ...x })),
+      ...trendNews().map((x) => ({ team: "트렌드팀", v: "vTTrend", ...x })),
+    ];
+    for (const c of Market.COINS) { const k = kimp(c); if (k != null && (k >= 3 || k <= -1)) items.push({ team: "회계팀", v: "vAcct", text: `${c} 김프 ${pctS(k)}` }); }
+    const box = $("hNews");
+    box.hidden = !items.length;
+    box.innerHTML = items.map((x) => `<button class="nrow" data-v="${x.v}"><b>${x.team}</b><span>${esc(x.text)}</span><i>›</i></button>`).join("");
+    box.querySelectorAll(".nrow").forEach((b) => b.onclick = () => { lastTab = "vTeam"; showView(b.dataset.v); });
+  }
 
   // ---------- 노트 가져오기 · 백업 ----------
   async function importNote(json) {
@@ -757,7 +934,7 @@
     loadFx(); setInterval(loadFx, 6 * 3600e3);
     pollUpbit(); setInterval(pollUpbit, 4000);
     await loadChart();
-    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) renderOpen(); }, 3000);
+    setInterval(() => { if (document.hidden) return; if ($("vTrade").classList.contains("on")) renderTrades(); if ($("vAcct").classList.contains("on")) renderAcct(); if ($("vHome").classList.contains("on")) { renderOpen(); renderNews(); } if ($("vTeam").classList.contains("on")) renderTeamList(); }, 3000);
   })();
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => Chart.retheme());
   if ("serviceWorker" in navigator && location.protocol !== "file:") navigator.serviceWorker.register("sw.js").catch(() => {});

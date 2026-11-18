@@ -79,5 +79,14 @@ const Market = (() => {
     } catch {}
     return null;
   }
-  return { TF, COINS, klines, sub, unsub, on, upbit, usdkrw };
+  // 롱:숏 계정 비율 (바이비트 공개 데이터, 1시간 단위)
+  async function longShort(coin) {
+    try {
+      const r = await fetch(`${BYBIT}/v5/market/account-ratio?category=linear&symbol=${coin}USDT&period=1h&limit=1`);
+      const x = ((await r.json()).result || {}).list || [];
+      if (x[0]) return { buy: +x[0].buyRatio, sell: +x[0].sellRatio, at: +x[0].timestamp };
+    } catch {}
+    return null;
+  }
+  return { TF, COINS, klines, sub, unsub, on, upbit, usdkrw, longShort };
 })();

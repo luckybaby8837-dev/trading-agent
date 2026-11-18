@@ -33,6 +33,7 @@
   <!-- 홈 -->
   <section id="vHome" class="view on">
     <div class="card hero" id="hHero"></div>
+    <div class="card news" id="hNews" hidden></div>
     <div class="ticks" id="hTick"></div>
     <div class="lk">
       <a href="https://www.tradingview.com/chart/?symbol=BYBIT%3ABTCUSDT.P" target="_blank" rel="noopener">트레이딩뷰 <small>BTC</small></a>
@@ -67,8 +68,46 @@
     </div>
   </section>
 
-  <!-- 손익 -->
+  <!-- 팀 -->
+  <section id="vTeam" class="view">
+    <div class="head" style="margin-top:6px"><h2>팀</h2></div>
+    <div id="teamList"></div>
+  </section>
+
+  <!-- 차트분석팀 -->
+  <section id="vTChart" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>차트분석팀</h2></div>
+    <p class="mut sm role">차트 분석 + 패턴도감 · 내 근거가 실제로 어땠는지 보여 줘요</p>
+    <div class="card"><h3>내 근거별 성과</h3><div id="tcPat"></div></div>
+    <div class="card"><h3>진행 중 포지션 근거</h3><div id="tcPos"></div></div>
+    <div class="card"><h3>분석 자료</h3><p class="mut sm" style="margin-top:0">차트에 선을 그은 뒤 분석 자료를 만들면, 시간봉 5개 상태 + 그린 선 + 내 포지션·근거가 함께 들어가요.</p><button class="primary" id="tcGo" style="width:100%">차트에서 분석 자료 만들기</button></div>
+  </section>
+
+  <!-- 트렌드팀 -->
+  <section id="vTTrend" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>트렌드팀</h2></div>
+    <p class="mut sm role">트렌드 + 시황·뉴스 + 온체인·고래 · 시장 분위기를 모아 봐요</p>
+    <div class="card"><h3>시장 온도</h3><div id="ttBody"></div><p class="mut sm" id="ttNote" style="margin-bottom:0"></p></div>
+    <div class="card"><h3>경제 일정 · 뉴스</h3><p class="mut sm" style="margin:0">어떤 방식으로 받을지 정해지면 여기에 보여 줄게요.</p></div>
+    <div class="card"><h3>분석 자료</h3><p class="mut sm" style="margin-top:0">주봉·일봉 흐름과 펀딩비·미결제약정·롱숏 비율을 묶어서 복사해요.</p>
+      <div class="row"><button class="primary" id="ttCopy">트렌드 자료 복사</button><button id="ttClaude">Claude 열기</button></div></div>
+  </section>
+
+  <!-- 감사팀 -->
+  <section id="vTAudit" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>감사팀</h2></div>
+    <p class="mut sm role">감사 + 복기 + 심리관리 · 계획대로 했는지 점검해요</p>
+    <div class="card"><h3>지금 점검</h3><div id="taChecks"></div></div>
+    <div class="card"><h3>최근 7일</h3><div id="taWeek"></div></div>
+    <div class="card"><h3>복기 자료</h3><p class="mut sm" style="margin-top:0">기간 안의 매매(근거·손절·익절·결과·심리)와 일지를 묶어서 복사해요.</p>
+      <div class="seg" id="taRange"></div>
+      <div class="row"><button class="primary" id="taCopy">복기 자료 복사</button><button id="taClaude">Claude 열기</button></div></div>
+  </section>
+
+  <!-- 회계팀 -->
   <section id="vAcct" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>회계팀</h2></div>
+    <p class="mut sm role">회계 + 김프·환율 · 손익과 돈의 흐름</p>
     <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
     <div class="grid2">
       <div class="card stat"><span>달러 환율</span><b id="aFx">—</b><small id="aFxNote" class="mut"></small></div>
@@ -141,7 +180,7 @@
   <button data-v="vHome" class="on"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-6h4v6"/></svg><span>홈</span></button>
   <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>매매</span></button>
   <button data-v="vChart"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>차트</span></button>
-  <button data-v="vAcct"><svg viewBox="0 0 24 24"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 7h5v5"/></svg><span>손익</span></button>
+  <button data-v="vTeam"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.4.1 4.3 1.9 4.9 4.8"/></svg><span>팀</span></button>
   <button data-v="vJournal"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg><span>일지</span></button>
 </nav>
 
