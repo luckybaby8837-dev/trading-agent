@@ -73,40 +73,51 @@
     <div id="teamList"></div>
   </section>
 
-  <!-- 차트분석팀 -->
-  <section id="vTChart" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>차트분석팀</h2></div>
-    <p class="mut sm role">차트 분석 + 패턴도감 · 내 근거가 실제로 어땠는지 보여 줘요</p>
-    <div class="card"><h3>내 근거별 성과</h3><div id="tcPat"></div></div>
-    <div class="card"><h3>진행 중 포지션 근거</h3><div id="tcPos"></div></div>
-    <div class="card"><h3>분석 자료</h3><p class="mut sm" style="margin-top:0">차트에 선을 그은 뒤 분석 자료를 만들면, 시간봉 5개 상태 + 그린 선 + 내 포지션·근거가 함께 들어가요.</p><button class="primary" id="tcGo" style="width:100%">차트에서 분석 자료 만들기</button></div>
+  <!-- 리스크 매니저 -->
+  <section id="vTRisk" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛡 리스크 매니저</h2></div>
+    <p class="mut sm role">선물 위험을 숫자로 심사해요 · 기준을 넘으면 <b>진입 거부</b></p>
+    <div class="card"><h3>오늘 손실 한도</h3><div id="rkToday"></div></div>
+    <div class="card"><h3>진행 중 포지션 심사</h3><div id="rkPos"></div></div>
+    <div class="card"><h3>진입 전 계산기</h3>
+      <p class="mut sm" style="margin-top:0">손절가를 넣으면 계좌 기준에 맞는 수량을 계산하고 통과·거부를 알려줘요.</p>
+      <div class="row"><div><label>코인</label><div class="seg coin" id="rkCoin"></div></div><div><label>방향</label><div class="seg" id="rkSide"></div></div></div>
+      <div class="row"><div><label for="rkEn">진입가</label><input id="rkEn" type="number" inputmode="decimal" step="any"></div><div><label for="rkSl">손절가</label><input id="rkSl" type="number" inputmode="decimal" step="any"></div></div>
+      <div class="row"><div><label for="rkLev">레버리지 (배)</label><input id="rkLev" type="number" inputmode="decimal" step="any" value="10"></div><div><label for="rkRisk">이번 매매 위험 (%)</label><input id="rkRisk" type="number" inputmode="decimal" step="any"></div></div>
+      <div id="rkOut"></div></div>
+    <div class="card"><h3>시장 위험</h3><div id="ttBody"></div><p class="mut sm" id="ttNote" style="margin-bottom:0"></p>
+      <div class="row" style="margin-top:12px"><button class="primary" id="ttCopy">시장 자료 복사</button><button id="ttClaude">Claude 열기</button></div></div>
+    <div class="card"><h3>거부 기준</h3>
+      <div class="row"><div><label for="rkCPer">한 매매 손실 (%)</label><input id="rkCPer" type="number" inputmode="decimal" step="any"></div><div><label for="rkCDay">하루 손실 (%)</label><input id="rkCDay" type="number" inputmode="decimal" step="any"></div><div><label for="rkCLev">최대 레버리지</label><input id="rkCLev" type="number" inputmode="decimal" step="any"></div></div>
+      <p class="mut sm" style="margin:6px 0 0">손절가 없음 · 손절 시 계좌 손실이 기준 초과 · 레버리지 초과 · 청산가가 손절가보다 먼저 · 오늘 손실 한도 도달 → 거부. 계좌는 바이비트 자산 기준이에요.</p></div>
   </section>
 
-  <!-- 트렌드팀 -->
-  <section id="vTTrend" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>트렌드팀</h2></div>
-    <p class="mut sm role">트렌드 + 시황·뉴스 + 온체인·고래 · 시장 분위기를 모아 봐요</p>
-    <div class="card"><h3>시장 온도</h3><div id="ttBody"></div><p class="mut sm" id="ttNote" style="margin-bottom:0"></p></div>
-    <div class="card"><h3>경제 일정 · 뉴스</h3><p class="mut sm" style="margin:0">어떤 방식으로 받을지 정해지면 여기에 보여 줄게요.</p></div>
-    <div class="card"><h3>분석 자료</h3><p class="mut sm" style="margin-top:0">주봉·일봉 흐름과 펀딩비·미결제약정·롱숏 비율을 묶어서 복사해요.</p>
-      <div class="row"><button class="primary" id="ttCopy">트렌드 자료 복사</button><button id="ttClaude">Claude 열기</button></div></div>
-  </section>
-
-  <!-- 감사팀 -->
-  <section id="vTAudit" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>감사팀</h2></div>
-    <p class="mut sm role">감사 + 복기 + 심리관리 · 계획대로 했는지 점검해요</p>
-    <div class="card"><h3>지금 점검</h3><div id="taChecks"></div></div>
+  <!-- 심리 코치 -->
+  <section id="vTMind" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🧠 심리 코치</h2></div>
+    <p class="mut sm role">감정 매매 신호를 알려줘요 · <b>경고만</b> 하고 판단은 내가 해요</p>
+    <div class="card"><h3>지금</h3><div id="mcNow"></div></div>
+    <div class="card"><h3>최근 30일 패턴</h3><div id="mcPat"></div></div>
     <div class="card"><h3>최근 7일</h3><div id="taWeek"></div></div>
     <div class="card"><h3>복기 자료</h3><p class="mut sm" style="margin-top:0">기간 안의 매매(근거·손절·익절·결과·심리)와 일지를 묶어서 복사해요.</p>
       <div class="seg" id="taRange"></div>
       <div class="row"><button class="primary" id="taCopy">복기 자료 복사</button><button id="taClaude">Claude 열기</button></div></div>
   </section>
 
-  <!-- 회계팀 -->
+  <!-- 데이터 분석가 -->
+  <section id="vTData" class="view">
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>📊 데이터 분석가</h2></div>
+    <p class="mut sm role">내 매매 기록에서 사실만 뽑아요 · 5건 미만은 참고만</p>
+    <div class="seg" id="dsRange" style="margin-bottom:10px"></div>
+    <div class="card"><h3>발견</h3><div id="dsFind"></div></div>
+    <div id="dsBody"></div>
+    <div class="card"><h3>분석 자료</h3><p class="mut sm" style="margin-top:0">차트에 선을 그은 뒤 분석 자료를 만들면, 시간봉 5개 상태 + 그린 선 + 내 포지션·근거가 함께 들어가요.</p><button class="primary" id="tcGo" style="width:100%">차트에서 분석 자료 만들기</button></div>
+  </section>
+
+  <!-- 돈 관리 (홈에서 들어옴) -->
   <section id="vAcct" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>회계팀</h2></div>
-    <p class="mut sm role">회계 + 김프·환율 · 손익과 돈의 흐름</p>
+    <div class="head tpage"><button class="back" data-back="vHome" aria-label="홈으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>돈 관리</h2></div>
+    <p class="mut sm role">손익 · 출금·입금 · 김프·환율</p>
     <div class="card"><h3>손익</h3><div class="seg" id="pnlSeg"></div><div id="pnlBody"></div></div>
     <div class="grid2">
       <div class="card stat"><span>달러 환율</span><b id="aFx">—</b><small id="aFxNote" class="mut"></small></div>

@@ -323,3 +323,16 @@ body.mkOpen{overflow:hidden}
 .clg{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--mut);padding:10px 2px 0}
 .clg span{display:inline-flex;align-items:center;gap:5px}.clg .hold-k{width:14px}
 .clg span:last-child{color:var(--ac)}
+
+/* 3명 팀 */
+.verdict{display:flex;flex-direction:column;gap:3px;margin-top:12px;padding:11px 13px;border-radius:12px;font-size:13px}
+.verdict b{font-size:15px}
+.verdict.ok{background:var(--up-soft);color:var(--up)}.verdict.no{background:var(--dn-soft);color:var(--dn)}
+.rkrow{padding:10px 0;border-top:1px solid var(--bd)}.rkrow:first-child{border-top:0;padding-top:0}
+.rkrow .l1{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.rkrow .chk{margin-top:6px}
+.wprog.bad .wbar i{background:var(--dn)}.wprog.bad span{color:var(--dn);font-weight:700}
+.dst td:first-child{font-family:var(--font);font-weight:600}
+.dst tr.few{opacity:.55}
+.hlink{display:flex;justify-content:space-between;align-items:center;width:100%;margin-top:12px;padding:10px 12px;min-height:0;border:1px solid var(--bd);border-radius:11px;background:var(--card2);font-size:13.5px;font-weight:600;color:var(--tx)}
+.hlink i{font-style:normal;color:var(--mut)}

@@ -130,7 +130,7 @@ const Bybit = (() => {
         const rec = {
           id, src: "bybit", venue: "bybit", coin: coinOf(c.symbol), side, status: "closed",
           en: +c.avgEntryPrice, exit: +c.avgExitPrice, qty: +c.closedSize || +c.qty, pnl: +c.closedPnl,
-          fee: (+c.openFee || 0) + (+c.closeFee || 0), lev: +c.leverage || 0, closeDate: cd,
+          fee: (+c.openFee || 0) + (+c.closeFee || 0), lev: +c.leverage || 0, closeDate: cd, closeTime: ct,
         };
         if (!old) {
           Object.assign(rec, { date: cd, time: ct, basis: [], mood: [], why: "", hit: "" });
@@ -146,6 +146,7 @@ const Bybit = (() => {
         const rec = { id, src: "bybit", venue: "bybit", coin: coinOf(p.symbol), side, status: "open", en: +p.avgPrice, qty: +p.size, lev: +p.leverage || 0 };
         if (+p.stopLoss) rec.sl = +p.stopLoss;
         if (+p.takeProfit) rec.tp = +p.takeProfit;
+        if (+p.liqPrice) rec.liq = +p.liqPrice;
         // 바이비트의 createdTime은 '이 종목 포지션 칸이 처음 생긴 때'라서 몇 년 전일 수 있음 → 체결 내역으로 실제 진입 시각을 찾음
         const sizeKey = `${p.size}|${p.avgPrice}`;
         if (!old || !old.openFound || old.sizeKey !== sizeKey) {
