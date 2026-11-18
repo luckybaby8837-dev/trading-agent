@@ -1,5 +1,5 @@
 ﻿// 앱 화면 파일은 저장해 두고(네트워크 우선), 시세는 항상 새로 받아옴
-const CACHE = "trade-agent-v41";
+const CACHE = "trade-agent-v42";
 const SHELL = ["./", "./index.html", "./app.css", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png",
   "./js/store.js", "./js/sync.js", "./js/bybit.js", "./js/upbit.js", "./js/market.js", "./js/indicators.js", "./js/chart.js", "./js/analysis.js", "./js/markup.js", "./js/counsel.js", "./js/main.js"];
 const LIBS = ["unpkg.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com"];
@@ -14,6 +14,7 @@ self.addEventListener("fetch", (e) => {
     return;
   }
   if (url.origin !== location.origin) return; // 시세 API는 그대로
+  if (url.pathname.startsWith("/upbit/")) return; // PC 서버의 업비트 중계는 가로채지 않음
   // 앱 파일은 항상 서버에 새 버전이 있는지 확인 (브라우저 임시 저장본 무시)
   e.respondWith(fetch(url.href, { cache: "no-cache", credentials: "same-origin" }).then((r) => { const c = r.clone(); caches.open(CACHE).then((x) => x.put(e.request, c)); return r; }).catch(() => caches.match(e.request)));
 });
