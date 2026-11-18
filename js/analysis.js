@@ -40,6 +40,7 @@ const Analysis = (() => {
         const hi = Math.max(v.line1, v.line2), lo = Math.min(v.line1, v.line2);
         out.push(`${i + 1}. 평행채널 기준선 ${pt(v.from)} → ${pt(v.to)}, 지금 상단 ${f(hi)} / 중앙 ${f(v.mid)} / 하단 ${f(lo)}, 채널 안 위치 ${(((price - lo) / (hi - lo)) * 100).toFixed(0)}%`);
       }
+      if (v.kind === "확장 피보나치") out.push(`${i + 1}. 확장 피보나치 A ${pt(v.from)} → B ${pt(v.to)} → C ${pt(v.at)}: ` + v.levels.map(([r, p]) => `${r}=${f(p)}`).join(", "));
       if (v.kind === "피보나치") out.push(`${i + 1}. 피보나치 ${pt(v.from)} → ${pt(v.to)}: ` + v.levels.map(([r, p]) => `${r}=${f(p)}`).join(", "));
     });
     return out.join("\n");

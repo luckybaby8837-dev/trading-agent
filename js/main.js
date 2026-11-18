@@ -243,11 +243,12 @@
     tline: '<svg viewBox="0 0 24 24"><path d="M4 19L20 5"/><circle cx="4" cy="19" r="1.6"/><circle cx="20" cy="5" r="1.6"/></svg>',
     channel: '<svg viewBox="0 0 24 24"><path d="M3 15L15 4M9 20L21 9"/></svg>',
     fib: '<svg viewBox="0 0 24 24"><path d="M3 5h18M3 10h18M3 14h18M3 19h18"/></svg>',
+    fibx: '<svg viewBox="0 0 24 24"><path d="M3 19l5-9 4 5"/><path d="M12 4h9M12 8h9M12 12h9"/></svg>',
     erase: '<svg viewBox="0 0 24 24"><path d="M5 5l14 14M19 5L5 19"/></svg>',
   };
-  const TOOLS = [["hline", "수평선"], ["tline", "추세선"], ["channel", "평행채널"], ["fib", "피보"], ["erase", "지우기"]];
+  const TOOLS = [["hline", "수평선"], ["tline", "추세선"], ["channel", "평행채널"], ["fib", "피보"], ["fibx", "확장 피보"], ["erase", "지우기"]];
   const HINT = {
-    hline: ["가격을 한 번 누르세요"], tline: ["시작점을 누르세요", "끝점을 누르세요"], fib: ["시작점(1)을 누르세요", "끝점(0)을 누르세요"],
+    hline: ["가격을 한 번 누르세요"], tline: ["시작점을 누르세요", "끝점을 누르세요"], fib: ["시작점(1)을 누르세요", "끝점(0)을 누르세요"], fibx: ["추세 시작점(A)을 누르세요", "추세 끝점(B)을 누르세요", "되돌림 지점(C)을 누르세요"],
     channel: ["기준선 시작점을 누르세요", "기준선 끝점을 누르세요", "반대쪽 선 위치를 누르세요"], erase: ["지울 선을 누르세요"],
   };
   let activeTool = null, step = 0;

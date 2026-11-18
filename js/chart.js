@@ -3,6 +3,9 @@ const Chart = (() => {
   const LW = window.LightweightCharts;
   const TZ = -new Date().getTimezoneOffset() * 60; // 한국 시간으로 표시
   const FIB = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1, 1.272, 1.618];
+  // 확장 피보나치 (추세 기반): A→B 길이를 C에서 다시 잼
+  const FIBX = [0, 0.382, 0.618, 1, 1.272, 1.618, 2, 2.618];
+  const fibxP = (d, r) => d.c.p + (d.b.p - d.a.p) * r;
   const PRICE_BAND = 0.76; // 위쪽 76%는 가격, 아래는 RSI
 
   let el, ov, ctx, chart, S = {}, bars = [], ind = null, coin = "BTC", tf = "4h";
@@ -233,6 +236,14 @@ const Chart = (() => {
       }
       return { segs, labels, diag: [[X(d.a.t), Y(d.a.p), X(d.b.t), Y(d.b.p)]] };
     }
+    if (d.type === "fibx") {
+      const x0 = X(d.c.t), segs = [], labels = [];
+      for (const r of FIBX) {
+        const p = fibxP(d, r), y = Y(p);
+        segs.push([x0, y, P.w, y]); labels.push([P.w - 4, y, r + "  " + fmtP(p)]);
+      }
+      return { segs, labels, diag: [[X(d.a.t), Y(d.a.p), X(d.b.t), Y(d.b.p)], [X(d.b.t), Y(d.b.p), X(d.c.t), Y(d.c.p)]] };
+    }
     return { segs: [] };
   }
   function seg(a, b, t0, t1) {
@@ -266,7 +277,7 @@ const Chart = (() => {
   }
 
   // ---------- 그리기 입력 ----------
-  const NEED = { hline: 1, tline: 2, channel: 3, fib: 2 };
+  const NEED = { hline: 1, tline: 2, channel: 3, fib: 2, fibx: 3 };
   function setTool(t, done) {
     tool = t; temp = []; onDrawDone = done; sig = "";
     ov.style.pointerEvents = t ? "auto" : "none";
@@ -292,6 +303,7 @@ const Chart = (() => {
     const h = { t: hover.t, p: hover.p };
     if (tool === "tline" || tool === "fib") return { type: tool, a: temp[0], b: h };
     if (tool === "channel") return temp.length === 1 ? { type: "tline", a: temp[0], b: h } : { type: "channel", a: temp[0], b: temp[1], c: h };
+    if (tool === "fibx") return temp.length === 1 ? { type: "tline", a: temp[0], b: h } : { type: "fibx", a: temp[0], b: temp[1], c: h };
     return { type: "hline", p: h.p };
   }
   let hoverHit = null;
@@ -312,7 +324,7 @@ const Chart = (() => {
     }
     temp.push({ t: q.t, p: q.p });
     if (temp.length >= NEED[tool]) {
-      const d = tool === "hline" ? { type: "hline", p: temp[0].p } : tool === "channel" ? { type: "channel", a: temp[0], b: temp[1], c: temp[2] } : { type: tool, a: temp[0], b: temp[1] };
+      const d = tool === "hline" ? { type: "hline", p: temp[0].p } : tool === "channel" || tool === "fibx" ? { type: tool, a: temp[0], b: temp[1], c: temp[2] } : { type: tool, a: temp[0], b: temp[1] };
       temp = [];
       if (onDrawDone) onDrawDone({ add: d });
     }
@@ -348,6 +360,7 @@ const Chart = (() => {
       return { kind: "평행채널", line1: lo, line2: hi, mid: lo * Math.exp(off / 2), from: d.a, to: d.b };
     }
     if (d.type === "fib") return { kind: "피보나치", from: d.a, to: d.b, levels: FIB.map((r) => [r, d.b.p + (d.a.p - d.b.p) * r]) };
+    if (d.type === "fibx") return { kind: "확장 피보나치", from: d.a, to: d.b, at: d.c, levels: FIBX.map((r) => [r, fibxP(d, r)]) };
   }
 
   function setDrawings(list) { drawings = list; hoverHit = null; sig = ""; }
