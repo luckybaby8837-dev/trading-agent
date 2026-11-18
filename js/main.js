@@ -448,7 +448,7 @@
       <div class="card">
         <label>지금 심리 상태</label><div class="chips" id="fMood"></div>
         <label for="fMoodT">떠오르는 생각</label><textarea id="fMoodT" rows="2" placeholder="지금 머릿속에 있는 말을 그대로">${esc(t.moodText || "")}</textarea>
-        <label class="chk" style="display:flex;gap:8px;align-items:center;color:var(--tx);font-weight:500"><input type="checkbox" id="fSnap" ${old ? "" : "checked"} style="width:18px;min-height:0">지금 차트 그림을 같이 저장 (그린 선 포함)</label>
+        <label class="chk" style="display:flex;gap:8px;align-items:center;color:var(--tx);font-weight:500"><input type="checkbox" id="fSnap" ${old ? "" : "checked"} style="width:18px;min-height:0">기준 시간봉 차트를 매매 기록과 일지에 저장 (그린 선 포함)</label>
       </div>
       <div class="err" id="fErr"></div>
       <button class="primary" id="fSave" style="width:100%;min-height:50px;margin-top:4px">${old ? "수정 저장" : "기록 저장"}</button>`);
@@ -486,8 +486,9 @@
         venue, coin, side: venue === "upbit" ? "buy" : side, tf, en, qty: +$("fQty").value || 0, sl: +$("fSl").value || 0, tp: +$("fTp").value || 0,
         basis: getBasis(), why: $("fWhy").value.trim(), mood: getMood(), moodText: $("fMoodT").value.trim(),
       });
-      if ($("fSnap").checked && coin === st.coin) n.img = (await chartShot()) || n.img || null;
-      await Store.put("trades", n); await loadData(); closeSheet(); renderTrades(); toast("매매를 기록했어요");
+      const shot = $("fSnap").checked ? await captureEntry(n) : null;
+      await Store.put("trades", n); await loadData(); closeSheet(); renderTrades(); renderHome();
+      toast(shot ? `매매 기록 · ${Market.TF[tf].name} 차트를 일지에 넣었어요` : "매매를 기록했어요");
     };
   }
 
@@ -533,6 +534,26 @@
       await Store.del("trades", t.id); await loadData(); closeSheet(); renderTrades(); toast("삭제했어요");
     };
   }
+  // 진입 차트 자동 캡처: 근거에 적은 시간봉(15분이면 15분, 1시간이면 1시간)으로 찍어서
+  // ① 매매 기록의 '진입 때 차트' ② 일지(차트 기록)에 넣음. 다 찍으면 보던 차트로 돌아감
+  async function captureEntry(t) {
+    if (!Market.COINS.includes(t.coin)) return null;
+    const tf = Market.TF[t.tf] ? t.tf : st.tf, prev = { coin: st.coin, tf: st.tf };
+    await setChart(t.coin, tf);
+    const img = await chartShot();
+    if (prev.coin !== st.coin || prev.tf !== st.tf) setChart(prev.coin, prev.tf);
+    if (!img) return null;
+    if (!t.imgEdit) t.img = img;
+    const sid = "shot_" + t.id + "_" + (t.date || today()), old = await Store.get("journal", sid);
+    const text = `${t.coin} ${Market.TF[tf].name} · ${sideName[t.side]} 진입 ${t.en ? Chart.fmtP(t.en) : ""}${(t.basis || []).length ? " · " + t.basis.join(", ") : ""}${t.why ? " · " + t.why : ""}`;
+    if (old && old.imgEdit) {
+      // 이미 그림을 그려 둔 캡처는 덮지 않고 새로 하나 더 남김
+      await Store.put("journal", { id: sid + "_" + Date.now().toString(36), kind: "shot", trade: t.id, date: today(), time: nowHM(), text, mood: t.mood || [], img, imgEdit: null });
+    } else {
+      await Store.put("journal", Object.assign(old || { id: sid, kind: "shot", trade: t.id, date: today(), time: nowHM() }, { text, mood: t.mood || [], img, imgEdit: null }));
+    }
+    return img;
+  }
   // 진입 근거 빠른 입력 (칩 · 시간봉 · 한 줄 메모 · 심리 · 차트 그림)
   function basisForm(id) {
     const t = st.trades.find((x) => x.id === id); if (!t) return;
@@ -544,7 +565,7 @@
         <label>기준 시간봉</label><div class="chips" id="bTf"></div>
         <label for="bWhy">한 줄 메모</label><textarea id="bWhy" rows="2" placeholder="예: 4시간 채널 하단 + RSI 다이버전스">${esc(t.why || "")}</textarea>
         <label>지금 심리</label><div class="chips" id="bMood"></div>
-        ${chartOk ? `<label class="chk" style="display:flex;gap:8px;align-items:center;color:var(--tx);font-weight:500"><input type="checkbox" id="bSnap" checked style="width:18px;min-height:0">차트 그림 같이 저장 (그린 선 · 진입선 포함)</label>` : ""}
+        ${chartOk ? `<p class="mut sm" id="bShotNote" style="margin:12px 0 0">📷 저장하면 고른 시간봉 차트(그린 선 · 진입선 포함)가 <b>매매 기록과 일지에 자동으로</b> 들어가요.</p>` : ""}
       </div>
       <button class="primary" id="bSave" style="width:100%;min-height:50px">저장</button>`);
     $("shX").onclick = closeSheet;
@@ -556,11 +577,9 @@
     $("bSave").onclick = async () => {
       $("bSave").disabled = true; $("bSave").textContent = "저장하는 중…";
       Object.assign(t, { basis: getB(), tf, why: $("bWhy").value.trim(), mood: getM() });
-      if (chartOk && $("bSnap").checked) {
-        await setChart(t.coin, tf);
-        t.img = (await chartShot()) || t.img || null;
-      }
-      await Store.put("trades", t); await loadData(); closeSheet(); renderHome(); renderTrades(); toast("진입 근거를 저장했어요");
+      const shot = chartOk ? await captureEntry(t) : null;
+      await Store.put("trades", t); await loadData(); closeSheet(); renderHome(); renderTrades();
+      toast(shot ? `진입 근거 저장 · ${Market.TF[tf].name} 차트를 일지에 넣었어요` : "진입 근거를 저장했어요");
     };
   }
 
