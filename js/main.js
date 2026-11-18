@@ -310,6 +310,7 @@
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div><p class="mut sm">만드는 중이에요… (시간봉 5개를 함께 읽어요)</p>`);
     $("shX").onclick = closeSheet;
     let text = await Analysis.build(st.coin, st.tf, st.drawings, price());
+    if ($("sheet").hidden) return;
     const myPos = st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit");
     if (myPos.length) text += "\n\n[내 진행 중 포지션]\n" + myPos.map((t) => `- ${sideName[t.side]} 진입 ${Chart.fmtP(t.en)}${t.qty ? ` · ${t.qty}개` : ""}${t.sl ? ` · 손절 ${Chart.fmtP(t.sl)}` : ""}${t.tp ? ` · 익절 ${Chart.fmtP(t.tp)}` : ""} (${t.date})`
       + `\n  근거: ${[...(t.basis || [])].join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? `\n  메모: ${t.why}` : ""}${(t.notes || []).slice(-5).map((n) => `\n  포지션 중 생각 (${n.d} ${n.tm}): ${n.text}`).join("")}`).join("\n");
@@ -359,6 +360,7 @@
     const ubDates = st.trades.filter((t) => t.src === "upbit" && t.status === "closed").map((t) => t.closeDate || t.date).sort();
     st.upbitFrom = ubDates[0] || null;
     st.upSnap = (await Store.get("legacy", "upbit_snapshot")) || null;
+    st.bbSnap = (await Store.get("legacy", "bybit_snapshot")) || null;
     updatePosLines();
   }
   // 손익 계산용: 바이비트 자동 기록이 있는 기간의 '노트에서 옮긴 바이비트 매매'는 빼고 셈 (같은 매매가 두 번 잡히지 않게)
@@ -378,7 +380,8 @@
     const p = open ? (lp ? tradePnl(t, lp) : null) : realPnl(t) ?? (t.pnl ?? tradePnl(t));
     const ex = open ? lp : t.exit, s = t.side === "short" ? -1 : 1;
     const pct = ex && t.en ? (ex / t.en - 1) * 100 * s : null;
-    return `<div class="tline" data-id="${t.id}"><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b><span class="tv">${venueName[t.venue]}</span>
+    const dup = shadowed(t);
+    return `<div class="tline${dup ? " dup" : ""}" data-id="${t.id}"${dup ? ' title="자동 기록과 겹쳐서 손익 합계에서 뺐어요"' : ""}><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b><span class="tv">${venueName[t.venue]}${dup ? " · 노트 (중복, 합계 제외)" : ""}</span>
       <span class="tp"><b class="${sgn(p || 0)}">${p == null ? "—" : (p > 0 ? "+" : "") + money(p, cur)}</b><small class="${sgn(pct || 0)}">${pct == null ? "" : pctS(pct)}</small></span></div>`;
   }
   function renderTrades() {
@@ -758,6 +761,10 @@
     return ok ? v : null;
   }
   // 업비트 자산 = 원화 + 코인 수량 × 지금 업비트 가격 (PC가 남긴 잔고 기록으로 계산, 폰에서도 보임)
+  function bybitEquity() {
+    if (Bybit.equity) return Bybit.equity;
+    const s = st.bbSnap; return s && s.v ? { v: s.v, at: s.at } : null;
+  }
   function upbitEquity() {
     const s = st.upSnap; if (!s) return null;
     let v = s.krw || 0;
@@ -770,7 +777,7 @@
     let un = 0, unB = 0, unU = 0;
     for (const t of st.trades.filter((x) => x.status === "open")) { const lp = livePrice(t), p = lp ? tradePnl(t, lp) : null, c = p == null ? null : conv(p, curOf(t)); if (c != null) { un += c; if (t.venue === "upbit") unU += c; else unB += c; } }
     const ubAuto = upbitEquity();
-    const bbAuto = Bybit.equity, bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = ubAuto != null ? ubAuto : +Store.pref.get("asUpbit", 0) || 0;
+    const bbAuto = bybitEquity(), bb = bbAuto ? bbAuto.v : +Store.pref.get("asBybit", 0) || 0, ub = ubAuto != null ? ubAuto : +Store.pref.get("asUpbit", 0) || 0;
     const eqU = bb ? conv(bb, "USD") : 0, eqK = ub ? conv(ub, "KRW") : 0, has = !!(bb || ub);
     const eq = has && eqU != null && eqK != null ? eqU + eqK : null;
     // 바이비트 자동 잔고에는 미실현이 이미 들어 있음. 손으로 넣은 값엔 더해 줌
@@ -835,11 +842,12 @@
   let hT = 0;
   function homeSoon() { if (hT || !$("vHome").classList.contains("on") || document.hidden) return; hT = setTimeout(() => { hT = 0; renderHero(); renderTicks(); }, 1000); }
   function renderSet() {
-    const a = Bybit.equity;
+    const a = bybitEquity();
     $("asBybit").value = a ? a.v.toFixed(2) : Store.pref.get("asBybit", "") || "";
     $("asBybit").disabled = !!a;
-    const u = upbitEquity(); if (u != null) { $("asUpbit").value = u; $("asUpbit").disabled = true; } else $("asUpbit").disabled = false;
-    $("asUpbit").value = Store.pref.get("asUpbit", "") || "";
+    const u = upbitEquity();
+    $("asUpbit").value = u != null ? u : Store.pref.get("asUpbit", "") || "";
+    $("asUpbit").disabled = u != null;
     renderFontPick();
   }
   // 숫자 글꼴 고르기
@@ -1191,10 +1199,10 @@
     return `노트에서 매매 ${trades.length}건, 일지 ${journal.length}개, 출금·입금 ${cash.length}건을 가져왔어요.`;
   }
   async function backup() {
-    return { app: "trade-agent", v: 1, at: new Date().toISOString(), trades: await Store.all("trades"), journal: await Store.all("journal"), drawings: await Store.all("drawings"), legacy: await Store.all("legacy") };
+    return { app: "trade-agent", v: 1, at: new Date().toISOString(), trades: await Store.all("trades"), journal: await Store.all("journal"), drawings: await Store.all("drawings"), legacy: await Store.all("legacy"), cash: await Store.all("cash") };
   }
   async function restore(d) {
-    for (const k of ["trades", "journal", "drawings", "legacy"]) if (d[k]) await Store.putMany(k, d[k]);
+    for (const k of ["trades", "journal", "drawings", "legacy", "cash"]) if (d[k]) await Store.putMany(k, d[k]);
     await loadData(); await loadDrawings();
     return `백업을 불러왔어요 (매매 ${(d.trades || []).length}건, 일지 ${(d.journal || []).length}개).`;
   }
@@ -1332,7 +1340,12 @@
     // 새 버전이 올라오면 자동으로 받아서 한 번 새로 고침
     const had = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    navigator.serviceWorker.addEventListener("controllerchange", () => { if (had && !reloaded) { reloaded = true; location.reload(); } });
+    const busy = () => (window.Markup && Markup.isOpen()) || !$("sheet").hidden
+      || [...document.querySelectorAll("textarea, input:not([type=checkbox]):not([type=file]):not([type=date])")].some((x) => x.value && x.value.trim() && !x.disabled && !x.readOnly && x.offsetParent);
+    let pending = false;
+    const doReload = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+    navigator.serviceWorker.addEventListener("controllerchange", () => { if (!had) return; if (busy()) { pending = true; toast("새 버전이 있어요 · 앱을 다시 열면 적용돼요"); } else doReload(); });
+    document.addEventListener("visibilitychange", () => { if (pending && document.hidden) doReload(); });
     navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then((reg) => {
       document.addEventListener("visibilitychange", () => { if (!document.hidden) reg.update().catch(() => {}); });
       setInterval(() => reg.update().catch(() => {}), 10 * 60e3);

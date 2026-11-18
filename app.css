@@ -294,3 +294,4 @@ body.mkOpen{overflow:hidden}
 .pnRow{display:flex;gap:6px;margin-top:6px}
 .pnRow input{min-height:36px;padding:6px 10px;font-size:14px;flex:1;min-width:0}
 .pnRow button{flex:none}
+.tline.dup{opacity:.5}

@@ -1,5 +1,5 @@
 ﻿// 앱 화면 파일은 저장해 두고(네트워크 우선), 시세는 항상 새로 받아옴
-const CACHE = "trade-agent-v30";
+const CACHE = "trade-agent-v31";
 const SHELL = ["./", "./index.html", "./app.css", "./manifest.json", "./icon-192.png", "./icon-512.png", "./icon-maskable-512.png",
   "./js/store.js", "./js/sync.js", "./js/bybit.js", "./js/upbit.js", "./js/market.js", "./js/indicators.js", "./js/chart.js", "./js/analysis.js", "./js/markup.js", "./js/main.js"];
 const LIBS = ["unpkg.com", "cdn.jsdelivr.net", "fonts.googleapis.com", "fonts.gstatic.com", "www.gstatic.com"];

@@ -102,6 +102,11 @@ const Bybit = (() => {
     if (v == null) return false;
     const changed = !equity || Math.abs(equity.v - v) > 0.005;
     equity = { v, at: Date.now() }; Store.pref.set("bybitEq", equity);
+    // 다른 기기(열쇠 없는 PC)에서도 보이게 동기화 기록으로 남김 (바뀌었거나 30분마다)
+    try {
+      const old = await Store.get("legacy", "bybit_snapshot");
+      if (!old || Math.abs((old.v || 0) - v) > 0.5 || Date.now() - (old.at || 0) > 30 * 60e3) await Store.put("legacy", { id: "bybit_snapshot", v: Math.round(v * 100) / 100, at: Date.now() });
+    } catch {}
     return changed;
   }
 
