@@ -1,31 +1,41 @@
 // 저장소: 기기 안(IndexedDB)에 모든 기록 보관. 바뀐 내용은 동기화 모듈(sync.js)에 알려 줌.
 const Store = (() => {
-  const DBN = "trade-agent", VER = 2;
-  const STORES = ["trades", "journal", "memos", "drawings", "legacy", "cash"];
+  const DBN = "trade-agent";
+  // 기록 종류(동기화 이름). 출금·입금(cash)은 처음부터 있던 칸(memos)에 담아서, 저장소 구조를 바꿀 일이 없게 함
+  const STORES = ["trades", "journal", "drawings", "legacy", "cash"];
+  const PHYS = { cash: "memos" };
+  const NEED = ["trades", "journal", "memos", "drawings", "legacy"];
+  const phys = (s) => PHYS[s] || s;
   let dbp = null;
   const subs = [];
   const emit = (store, op, v) => { for (const f of subs) try { f(store, op, v); } catch {} };
 
-  function open() {
-    if (dbp) return dbp;
-    dbp = new Promise((res, rej) => {
-      const q = indexedDB.open(DBN, VER);
-      q.onupgradeneeded = () => {
-        for (const s of STORES) if (!q.result.objectStoreNames.contains(s)) q.result.createObjectStore(s, { keyPath: "id" });
-      };
+  function openAt(ver) {
+    return new Promise((res, rej) => {
+      const q = ver ? indexedDB.open(DBN, ver) : indexedDB.open(DBN);
+      q.onupgradeneeded = () => { for (const s of NEED) if (!q.result.objectStoreNames.contains(s)) q.result.createObjectStore(s, { keyPath: "id" }); };
       q.onsuccess = () => {
         const db = q.result;
-        // 새 버전 앱이 저장소를 바꾸려 하면, 이 (예전) 화면은 연결을 놓고 새로 고침
-        db.onversionchange = () => { db.close(); dbp = null; location.reload(); };
+        db.onversionchange = () => { db.close(); dbp = null; };
         res(db);
       };
       q.onerror = () => rej(q.error);
-      q.onblocked = () => { const t = document.getElementById("toast"); if (t) { t.textContent = "다른 창에 열린 예전 앱을 닫아 주세요"; t.hidden = false; } };
     });
+  }
+  function open() {
+    if (dbp) return dbp;
+    // 지금 있는 버전 그대로 열고, 빠진 칸이 있을 때만 한 단계 올림
+    dbp = openAt(0).then((db) => {
+      if (NEED.every((s) => db.objectStoreNames.contains(s))) return db;
+      const v = db.version; db.close();
+      return openAt(v + 1);
+    });
+    dbp.catch(() => (dbp = null));
     return dbp;
   }
   async function tx(store, mode, fn) {
     const db = await open();
+    store = phys(store);
     return new Promise((res, rej) => {
       const t = db.transaction(store, mode), s = t.objectStore(store);
       const out = fn(s);
