@@ -343,10 +343,44 @@
   const realPnl = (t) => (shadowed(t) ? null : t.pnl ?? tradePnl(t));
   // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
   function updatePosLines() { Chart.setPositions(st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit")); }
+  // 매매 목록: 진행 중 → 달(요약, 접기) → 날짜(그날 손익) → 한 줄 매매
+  const openMonths = new Set([today().slice(0, 7)]);
+  const WD = ["일", "월", "화", "수", "목", "금", "토"];
+  function tradeLine(t) {
+    const cur = curOf(t), open = t.status === "open", lp = open ? livePrice(t) : null;
+    const p = open ? (lp ? tradePnl(t, lp) : null) : realPnl(t) ?? (t.pnl ?? tradePnl(t));
+    const ex = open ? lp : t.exit, s = t.side === "short" ? -1 : 1;
+    const pct = ex && t.en ? (ex / t.en - 1) * 100 * s : null;
+    return `<div class="tline" data-id="${t.id}"><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b><span class="tv">${venueName[t.venue]}</span>
+      <span class="tp"><b class="${sgn(p || 0)}">${p == null ? "—" : (p > 0 ? "+" : "") + money(p, cur)}</b><small class="${sgn(pct || 0)}">${pct == null ? "" : pctS(pct)}</small></span></div>`;
+  }
   function renderTrades() {
-    const list = st.trades.filter((t) => trFilter === "all" || t.status === trFilter);
-    $("trList").innerHTML = list.length ? list.map(tradeRow).join("") : `<div class="empty">아직 기록이 없어요. <b>+ 새 매매</b>로 시작해 보세요.</div>`;
-    $("trList").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+    const box = $("trList"), out = [];
+    const open = st.trades.filter((t) => t.status === "open");
+    const closed = st.trades.filter((t) => t.status === "closed");
+    if (trFilter !== "closed" && open.length) out.push(`<div class="tgroup"><div class="tmon static"><b>진행 중</b><span>${open.length}건</span></div>${open.map(tradeLine).join("")}</div>`);
+    if (trFilter !== "open") {
+      const dOf = (t) => t.closeDate || t.date || "";
+      const sorted = closed.slice().sort((a, b) => (dOf(b) + (b.time || "")).localeCompare(dOf(a) + (a.time || "")));
+      const months = [...new Set(sorted.map((t) => dOf(t).slice(0, 7)))];
+      for (const m of months) {
+        const ts = sorted.filter((t) => dOf(t).startsWith(m)), counted = ts.filter((t) => realPnl(t) != null);
+        const wins = counted.filter((t) => realPnl(t) > 0).length, sum = sumPnl(ts);
+        const isOpen = openMonths.has(m);
+        let body = "";
+        if (isOpen) {
+          const days = [...new Set(ts.map(dOf))];
+          body = days.map((d) => {
+            const dt = ts.filter((t) => dOf(t) === d), ds = sumPnl(dt), w = WD[new Date(d + "T00:00:00").getDay()];
+            return `<div class="tday"><span>${+d.slice(5, 7)}/${+d.slice(8)} (${w})</span><b class="${sgn(ds || 0)}">${ds == null ? "" : sgC(ds)}</b></div>${dt.map(tradeLine).join("")}`;
+          }).join("");
+        }
+        out.push(`<div class="tgroup"><button class="tmon" data-m="${m}"><b>${+m.slice(5)}월 <small>${m.slice(0, 4)}</small></b><span>${ts.length}건 · 승률 ${counted.length ? Math.round(wins / counted.length * 100) : 0}% · <b class="${sgn(sum || 0)}">${sum == null ? "—" : sgC(sum)}</b></span><i>${isOpen ? "▾" : "▸"}</i></button>${body}</div>`);
+      }
+    }
+    box.innerHTML = out.length ? out.join("") : `<div class="empty">아직 기록이 없어요. <b>+ 새 매매</b>로 시작해 보세요.</div>`;
+    box.querySelectorAll(".tline").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+    box.querySelectorAll(".tmon[data-m]").forEach((b) => b.onclick = () => { const m = b.dataset.m; openMonths.has(m) ? openMonths.delete(m) : openMonths.add(m); renderTrades(); });
   }
   function tradeRow(t) {
     const cur = curOf(t), lp = t.status === "open" ? livePrice(t) : null;
