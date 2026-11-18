@@ -5,7 +5,7 @@
 const Bybit = (() => {
   const API = "https://api.bybit.com", WS = "wss://stream.bybit.com/v5/private";
   const KEYS = "bybitKeys", LAST = "bybitLast";
-  const USER_FIELDS = ["tf", "basis", "why", "mood", "moodText", "img", "imgRes", "lesson", "hit", "closeMood", "sl", "tp", "trend", "ses"];
+  const USER_FIELDS = ["tf", "basis", "why", "mood", "moodText", "img", "imgRes", "lesson", "hit", "closeMood", "sl", "tp", "notes", "trend", "ses"];
   let keys = Store.pref.get(KEYS, null), offset = 0, ws = null, pingT = 0, retry = 0, busy = false, wsOn = false;
   let onStatus = () => {}, onData = () => {};
   let status = { msg: "", err: "", at: 0 };

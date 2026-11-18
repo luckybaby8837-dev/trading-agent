@@ -12,7 +12,7 @@ const Upbit = (() => {
   let onStatus = () => {}, onData = () => {};
   const set = (o) => { status = Object.assign(status, o); onStatus(status, { local: LOCAL, server, configured }); };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  const USER_FIELDS = ["tf", "basis", "why", "mood", "moodText", "img", "imgRes", "lesson", "hit", "closeMood", "sl", "tp"];
+  const USER_FIELDS = ["tf", "basis", "why", "mood", "moodText", "img", "imgRes", "lesson", "hit", "closeMood", "sl", "tp", "notes"];
 
   const ERR = {
     no_authorization_ip: "등록한 IP가 아니에요. PC 인터넷 주소가 바뀌었을 수 있어요 (업비트 Open API 관리에서 IP를 다시 넣어 주세요)",

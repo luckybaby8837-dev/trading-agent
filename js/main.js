@@ -312,7 +312,7 @@
     let text = await Analysis.build(st.coin, st.tf, st.drawings, price());
     const myPos = st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit");
     if (myPos.length) text += "\n\n[내 진행 중 포지션]\n" + myPos.map((t) => `- ${sideName[t.side]} 진입 ${Chart.fmtP(t.en)}${t.qty ? ` · ${t.qty}개` : ""}${t.sl ? ` · 손절 ${Chart.fmtP(t.sl)}` : ""}${t.tp ? ` · 익절 ${Chart.fmtP(t.tp)}` : ""} (${t.date})`
-      + `\n  근거: ${[...(t.basis || [])].join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? `\n  메모: ${t.why}` : ""}`).join("\n");
+      + `\n  근거: ${[...(t.basis || [])].join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? `\n  메모: ${t.why}` : ""}${(t.notes || []).slice(-5).map((n) => `\n  포지션 중 생각 (${n.d} ${n.tm}): ${n.text}`).join("")}`).join("\n");
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
       <p class="mut sm" style="margin-top:0">무료 방식이에요. 아래 순서대로 복사해서 Claude 대화창에 붙여 넣으면, 내가 그린 선까지 포함해서 차트를 읽어 줘요.</p>
       <div class="steps">
@@ -503,6 +503,7 @@
       <div class="card"><h3>매매 근거</h3><div class="chips">${(t.basis || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.why ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.why)}</p>` : ""}</div>
       <div class="card"><h3>심리 상태</h3><div class="chips">${(t.mood || []).map((b) => `<button class="on" disabled>${esc(b)}</button>`).join("") || '<span class="mut sm">없음</span>'}</div>${t.moodText ? `<p style="white-space:pre-wrap;margin:10px 0 0">${esc(t.moodText)}</p>` : ""}
         ${t.lesson ? `<h3 style="margin-top:14px">청산 후 생각</h3><p style="white-space:pre-wrap;margin:0">${esc(t.lesson)}</p>` : ""}</div>
+      ${(t.notes || []).length ? `<div class="card"><h3>포지션 동안 남긴 생각</h3>${t.notes.map((n) => `<div class="pn"><span class="mut">${esc(n.d.slice(5))} ${esc(n.tm)}</span> ${esc(n.text)}</div>`).join("")}</div>` : ""}
       ${["img", "imgRes"].map((f) => {
         const name = f === "img" ? "진입 때 차트" : "결과 차트";
         return t[f] ? `<div class="card"><div class="sh" style="margin-bottom:8px"><h3 style="margin:0">${name}</h3><button class="sm" data-draw="${f}">✏️ 그리기·수정</button></div><img class="pic" src="${t[f]}" alt="${name}" data-view="${f}"></div>`
@@ -797,7 +798,17 @@
     }).join("");
     $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); lastTab = "vChart"; showView("vChart"); });
   }
+  // 진행 중 포지션에 그때그때 생각 적기 (포지션 기록의 notes에 시간순으로 쌓임)
+  async function addNote(id, text) {
+    const t = st.trades.find((x) => x.id === id); if (!t || !text) return;
+    t.notes = [...(t.notes || []), { at: Date.now(), d: today(), tm: nowHM(), text }];
+    await Store.put("trades", t); await loadData(); toast("생각을 남겼어요");
+  }
+  const noteLine = (n) => `<div class="pn"><span class="mut">${n.d === today() ? "" : esc(n.d.slice(5)) + " "}${esc(n.tm)}</span> ${esc(n.text)}</div>`;
   function renderOpen() {
+    // 생각을 쓰는 중이면 다시 그리지 않음 (쓰던 글이 지워지지 않게)
+    const typing = [...$("hOpen").querySelectorAll(".pnIn")].some((x) => x.value.trim() || document.activeElement === x);
+    if (typing) return;
     const open = st.trades.filter((t) => t.status === "open");
     const td = new Date(today()).getTime();
     $("hOpen").innerHTML = open.length ? open.map((t) => {
@@ -806,10 +817,16 @@
       const line = has
         ? `<div class="bline"><span>${esc([...(t.basis || []), t.why].filter(Boolean).join(" · "))}</span><button class="sm ghost" data-b="${t.id}">수정</button></div>`
         : `<div class="bline need"><span>근거 미입력</span><button class="sm primary" data-b="${t.id}">근거 적기</button></div>`;
-      return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `).replace(/<\/div>\s*$/, line + "</div>");
+      const notes = (t.notes || []).slice(-2);
+      const pn = `<div class="pnote">${notes.map(noteLine).join("")}<div class="pnRow"><input class="pnIn" data-n="${t.id}" placeholder="지금 이 포지션에 대한 생각" enterkeyhint="done"><button class="sm primary" data-ns="${t.id}">남기기</button></div></div>`;
+      return tradeRow(t).replace(`<b>${esc(t.coin)}</b>`, `<i class="live"></i><b>${esc(t.coin)}</b>`).replace(/(<div class="l2"><span>)/, `$1보유 ${days}일 · `).replace(/<\/div>\s*$/, line + pn + "</div>");
     }).join("") : `<div class="empty">진행 중인 포지션이 없어요.</div>`;
     $("hOpen").querySelectorAll(".item").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
     $("hOpen").querySelectorAll("[data-b]").forEach((b) => b.onclick = (e) => { e.stopPropagation(); basisForm(b.dataset.b); });
+    $("hOpen").querySelectorAll(".pnote").forEach((x) => x.onclick = (e) => e.stopPropagation());
+    const send = async (id) => { const inp = $("hOpen").querySelector(`.pnIn[data-n="${id}"]`), v = inp.value.trim(); if (!v) return; inp.value = ""; inp.blur(); await addNote(id, v); renderOpen(); };
+    $("hOpen").querySelectorAll("[data-ns]").forEach((b) => b.onclick = () => send(b.dataset.ns));
+    $("hOpen").querySelectorAll(".pnIn").forEach((inp) => inp.onkeydown = (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(inp.dataset.n); } });
   }
   function renderHome() {
     $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
@@ -1114,7 +1131,8 @@
         + (t.status === "closed" ? ` → 청산 ${t.exit ? Chart.fmtP(t.exit) : "—"} (${t.closeDate || ""}) 손익 ${p == null ? "—" : (p >= 0 ? "+" : "") + p.toFixed(2) + cur(t)}${t.hit ? ` · 결과 ${t.hit}` : ""}` : " → 진행 중")
         + `\n  근거: ${(t.basis || []).join(", ") || "없음"}${t.tf ? ` / 기준 ${Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf}` : ""}${t.why ? ` / 메모: ${t.why}` : ""}`
         + `${(t.mood || []).length || t.moodText ? `\n  진입 때 심리: ${(t.mood || []).join(", ")}${t.moodText ? " — " + t.moodText : ""}` : ""}`
-        + `${(t.closeMood || []).length ? `\n  청산 때 심리: ${t.closeMood.join(", ")}` : ""}${t.lesson ? `\n  청산 후 생각: ${t.lesson}` : ""}`);
+        + `${(t.closeMood || []).length ? `\n  청산 때 심리: ${t.closeMood.join(", ")}` : ""}${t.lesson ? `\n  청산 후 생각: ${t.lesson}` : ""}`
+        + (t.notes || []).map((n) => `\n  포지션 중 생각 (${n.d} ${n.tm}): ${n.text}`).join(""));
     }
     lines.push("", `[일지·메모 ${jr.length}개]`);
     for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
