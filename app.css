@@ -3,7 +3,7 @@
   --ac:#3d63e8;--ac-soft:#e8edfd;--up:#0f9f5a;--dn:#e0424a;--up-soft:#e2f6ec;--dn-soft:#fde9ea;--pu:#8b4fd8;
   --up-a:rgba(15,159,90,.35);--dn-a:rgba(224,66,74,.35);
   --chart-bg:#ffffff;--grid:#f0f1f5;--ichi-t:#d08a1e;--ichi-k:#7a4b12;--cloud-up:rgba(15,159,90,.10);--cloud-dn:rgba(224,66,74,.10);
-  --cloud-up-line:rgba(15,159,90,.45);--cloud-dn-line:rgba(224,66,74,.45);--bb:#8b93a7;--rsi:#8b4fd8;--rsi-hi:#e0424a;--rsi-lo:#2f6bff;--draw:#3d63e8;
+  --cloud-up-line:rgba(15,159,90,.45);--cloud-dn-line:rgba(224,66,74,.45);--bb:#8b93a7;--rsi:#8b4fd8;--rsi-hi:#e0424a;--rsi-lo:#2f6bff;--draw:#3d63e8;--band:#d98a1c;
   --shadow:0 1px 2px rgba(20,23,31,.05),0 6px 18px rgba(20,23,31,.05);
   --font:"Pretendard",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
   --mono:"Pretendard",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
@@ -15,7 +15,7 @@
   --ac:#7c9bff;--ac-soft:#1d2744;--up:#33d17f;--dn:#ff6a70;--up-soft:#12281e;--dn-soft:#33181a;--pu:#b794f6;
   --up-a:rgba(51,209,127,.35);--dn-a:rgba(255,106,112,.35);
   --chart-bg:#11141b;--grid:#1a1e28;--ichi-t:#e0a03a;--ichi-k:#c98a4a;--cloud-up:rgba(51,209,127,.12);--cloud-dn:rgba(255,106,112,.12);
-  --cloud-up-line:rgba(51,209,127,.5);--cloud-dn-line:rgba(255,106,112,.5);--bb:#6f7891;--rsi:#b794f6;--rsi-hi:#ff6a70;--rsi-lo:#5b8cff;--draw:#7c9bff;
+  --cloud-up-line:rgba(51,209,127,.5);--cloud-dn-line:rgba(255,106,112,.5);--bb:#6f7891;--rsi:#b794f6;--rsi-hi:#ff6a70;--rsi-lo:#5b8cff;--draw:#7c9bff;--band:#f0b04a;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35);
   color-scheme:dark;
 }}

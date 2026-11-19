@@ -11,6 +11,21 @@ const Chart = (() => {
   let el, ov, ctx, chart, S = {}, bars = [], ind = null, coin = "BTC", tf = "4h";
   let drawings = [], tool = null, temp = [], hover = null, onDrawDone = null, magnet = true;
   let show = Store.pref.get("show", { ichi: true, bb: true, vol: true, rsi: true });
+  if (show.band == null) show.band = true;
+  // 손절 범위: 현재가 위아래 1% (20배면 자산 20%)
+  const BAND = 0.01, LEV = 20;
+  let bandLines = [];
+  function updateBand() {
+    for (const l of bandLines) try { S.candle.removePriceLine(l); } catch {}
+    bandLines = [];
+    if (!show.band || !bars.length) return;
+    const p = bars[bars.length - 1].c, col = css("--band") || "#e8a23d";
+    const add = (price, title) => bandLines.push(S.candle.createPriceLine({ price, color: col, title, lineStyle: 2, lineWidth: 1, axisLabelVisible: true }));
+    const r = Math.round(BAND * LEV * 100);
+    add(p * (1 + BAND), `+1% · ${LEV}배 ${r}%`);
+    add(p * (1 - BAND), `-1% · ${LEV}배 ${r}%`);
+  }
+  let bandP = 0;
   let log = Store.pref.get("log", true);
   let sig = "", raf = 0, liveT = 0;
 
@@ -113,6 +128,7 @@ const Chart = (() => {
       S.rsi.applyOptions({ color: rv >= 70 ? rHi : rv <= 30 ? rLo : rN });
       vis(S.rsi, show.rsi);
     }
+    bandP = bars[n - 1].c; updateBand();
     sig = "";
   }
   // 실시간 캔들 반영 (너무 잦은 재계산은 0.3초로 묶음)
@@ -123,6 +139,7 @@ const Chart = (() => {
     else if (k.t > last.t) bars.push(k);
     else return;
     S.candle.update({ time: lt(k.t), open: k.o, high: k.h, low: k.l, close: k.c });
+    if (Math.abs(k.c - bandP) / k.c > 0.0003) { bandP = k.c; updateBand(); }
     const now = Date.now();
     if (now - liveT > 300) {
       liveT = now;

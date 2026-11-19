@@ -226,7 +226,7 @@
   Market.sub(Market.COINS.map((c) => `tickers.${c}USDT`));
 
   // 지표 메뉴
-  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"]];
+  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"]];
   function buildIndMenu() {
     const m = $("indMenu");
     m.innerHTML = IND.map(([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`).join("")
