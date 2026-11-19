@@ -11,6 +11,8 @@ const Chart = (() => {
   let el, ov, ctx, chart, S = {}, bars = [], ind = null, coin = "BTC", tf = "4h";
   let drawings = [], tool = null, temp = [], hover = null, onDrawDone = null, magnet = true;
   let show = Store.pref.get("show", { ichi: true, bb: true, vol: true, rsi: true });
+  if (show.conf == null) show.conf = true;
+  let zones = [];
   let log = Store.pref.get("log", true);
   let sig = "", raf = 0, liveT = 0;
 
@@ -168,6 +170,7 @@ const Chart = (() => {
     if (show.ichi) cloud(P);
     if (show.rsi) rsiGuides(P);
     ctx.beginPath(); ctx.rect(0, 0, P.w, P.ph); ctx.clip();
+    if (show.conf) paintZones(P);
     for (const d of drawings) paint(d, P, false);
     if (tool && temp.length && hover) paint(preview(), P, true);
     ctx.restore();
@@ -243,6 +246,28 @@ const Chart = (() => {
     ctx.fillStyle = v >= 70 ? css("--rsi-hi") : v <= 30 ? css("--rsi-lo") : css("--mut");
     ctx.fillText("RSI 14  " + (v != null ? v.toFixed(1) : "") + (v >= 70 ? "  과매수" : v <= 30 ? "  과매도" : ""), 8, P.ph + 14);
   }
+
+  // 중첩 지도: 겹치는 자리를 띠로 (점수 높을수록 진하게)
+  function paintZones(P) {
+    ctx.font = "11px " + css("--mono");
+    let lastY = -99;
+    for (const z of [...zones].sort((p, q) => q.hi - p.hi)) {
+      const y1 = Y(z.hi), y2 = Y(z.lo);
+      if (y1 == null || y2 == null) continue;
+      const top = Math.min(y1, y2), h = Math.max(3, Math.abs(y2 - y1));
+      const ly = Math.max(top - 4, lastY + 14); lastY = ly;
+      const col = css("--conf") || "#e8a23d";
+      ctx.globalAlpha = 0.1 + 0.22 * z.rel; ctx.fillStyle = col; ctx.fillRect(0, top, P.w, h);
+      ctx.globalAlpha = 0.9; ctx.strokeStyle = col; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(0, top + 0.5); ctx.lineTo(P.w, top + 0.5); ctx.stroke();
+      ctx.globalAlpha = 1;
+      const t = `${"★".repeat(z.level)} ${z.labels.join(" · ")}`;
+      const w = Math.min(ctx.measureText(t).width + 10, P.w - 70);
+      ctx.fillStyle = css("--chart-bg"); ctx.globalAlpha = 0.85; ctx.fillRect(6, ly - 11, w, 14); ctx.globalAlpha = 1;
+      ctx.fillStyle = col; ctx.save(); ctx.beginPath(); ctx.rect(6, ly - 12, w, 16); ctx.clip(); ctx.fillText(t, 11, ly); ctx.restore();
+    }
+  }
+  function setZones(list) { zones = list || []; sig = ""; }
 
   // ---------- 선 모양 ----------
   function geom(d, P) {
@@ -428,8 +453,8 @@ const Chart = (() => {
     return c;
   }
   return {
-    init, setData, live, setDrawings, setPositions, setTool, setShow, setLog, retheme, snapshot, valueNow, fmtP,
-    get bars() { return bars; }, get ind() { return ind; }, get show() { return show; }, get log() { return log; },
+    init, setData, live, setDrawings, setZones, setPositions, setTool, setShow, setLog, retheme, snapshot, valueNow, fmtP,
+    get bars() { return bars; }, get ind() { return ind; }, get show() { return show; }, get tf() { return tf; }, get coin() { return coin; }, get log() { return log; },
     get magnet() { return magnet; }, set magnet(v) { magnet = v; },
   };
 })();

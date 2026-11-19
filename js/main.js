@@ -222,7 +222,7 @@
   Market.sub(Market.COINS.map((c) => `tickers.${c}USDT`));
 
   // 지표 메뉴
-  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"]];
+  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["conf", "중첩 지도 (겹치는 자리)"]];
   function buildIndMenu() {
     const m = $("indMenu");
     m.innerHTML = IND.map(([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`).join("")
@@ -232,7 +232,7 @@
       const k = i.dataset.k;
       if (k === "log") Chart.setLog(i.checked);
       else if (k === "mag") { Chart.magnet = i.checked; Store.pref.set("magnet", i.checked); }
-      else Chart.setShow(k, i.checked);
+      else { Chart.setShow(k, i.checked); if (k === "conf") updateZones(); }
     });
   }
   Chart.magnet = Store.pref.get("magnet", true);
@@ -291,7 +291,27 @@
   async function loadDrawings() {
     st.drawings = (await Store.all("drawings")).filter((d) => d.coin === st.coin && showOnTf(d, st.tf)).sort((a, b) => a.u - b.u);
     Chart.setDrawings(st.drawings);
+    updateZones();
   }
+  // 중첩 지도: 큰 시간봉 캔들은 5분 동안 저장해 두고 씀
+  const bigCache = {};
+  async function bigBars(coin, tf) {
+    const k = coin + tf, c = bigCache[k];
+    if (c && Date.now() - c.at < 5 * 60e3) return c.bars;
+    const bars = await Market.klines(coin, tf, 300);
+    bigCache[k] = { at: Date.now(), bars };
+    return bars;
+  }
+  st.zones = [];
+  async function updateZones() {
+    if (!Chart.show.conf || !Chart.bars.length) { st.zones = []; Chart.setZones([]); return; }
+    const coin = st.coin, tf = st.tf, big = {};
+    for (const k of Conf.bigger(tf)) try { big[k] = await bigBars(coin, k); } catch {}
+    if (coin !== st.coin || tf !== st.tf) return;
+    st.zones = Conf.build(Chart.bars, tf, st.drawings, big, Chart.valueNow);
+    Chart.setZones(st.zones);
+  }
+  setInterval(() => { if (document.visibilityState === "visible" && $("vChart").classList.contains("on")) updateZones(); }, 30e3);
   buildTools();
   $("chart").querySelector(".overlay").addEventListener("pointerdown", stepCount);
 
@@ -317,6 +337,7 @@
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div><p class="mut sm">만드는 중이에요… (시간봉 5개를 함께 읽어요)</p>`);
     $("shX").onclick = closeSheet;
     let text = await Analysis.build(st.coin, st.tf, st.drawings, price());
+    if (Chart.show.conf) { await updateZones(); text += "\n" + Conf.text(st.zones, price()); }
     if ($("sheet").hidden) return;
     const myPos = st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit");
     if (myPos.length) text += "\n\n[내 진행 중 포지션]\n" + myPos.map((t) => `- ${sideName[t.side]} 진입 ${Chart.fmtP(t.en)}${t.qty ? ` · ${t.qty}개` : ""}${t.sl ? ` · 손절 ${Chart.fmtP(t.sl)}` : ""}${t.tp ? ` · 익절 ${Chart.fmtP(t.tp)}` : ""} (${t.date})`
