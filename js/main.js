@@ -122,6 +122,7 @@
     document.body.dataset.v = v;
     scrollTo(0, 0);
     if (v === "vChart") fitChartView();
+    if (v === "vTV") renderTV();
     if (v === "vHome") renderHome();
     if (v === "vSet") { renderSet(); if (!Upbit.local) ubView(Upbit.status, { local: false }); }
     if (v === "vTeam") renderTeamList();
@@ -316,6 +317,30 @@
   };
 
   // 분석 자료
+  // 차트 탭 = 트레이딩뷰 위젯 (지표·선 그리기는 트레이딩뷰 그대로, 로그인 계정과는 별개)
+  let tvKey = "", tvLoad = null;
+  const tvSt = { coin: Store.pref.get("tvCoin", "BTC"), tf: Store.pref.get("tvTf", "240") };
+  const TV_TF = [["15분", "15"], ["1시간", "60"], ["4시간", "240"], ["일봉", "D"], ["주봉", "W"]];
+  function loadTVLib() {
+    if (window.TradingView) return Promise.resolve();
+    return (tvLoad = tvLoad || new Promise((ok, no) => { const s = document.createElement("script"); s.src = "https://s3.tradingview.com/tv.js"; s.onload = ok; s.onerror = () => { tvLoad = null; no(); }; document.head.appendChild(s); }));
+  }
+  async function renderTV(force) {
+    seg($("tvCoin"), Market.COINS.map((c) => [c, c]), tvSt.coin, (c) => { tvSt.coin = c; Store.pref.set("tvCoin", c); renderTV(); });
+    seg($("tvTf"), TV_TF, tvSt.tf, (t) => { tvSt.tf = t; Store.pref.set("tvTf", t); renderTV(); });
+    const dark = matchMedia("(prefers-color-scheme: dark)").matches, key = [tvSt.coin, tvSt.tf, dark].join("|");
+    if (key === tvKey && !force && $("tvBox").firstChild) return;
+    tvKey = key;
+    try { await loadTVLib(); } catch { $("tvBox").innerHTML = `<p class="mut sm" style="padding:16px">트레이딩뷰를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>`; tvKey = ""; return; }
+    $("tvBox").innerHTML = `<div id="tvW" style="width:100%;height:100%"></div>`;
+    new TradingView.widget({
+      container_id: "tvW", autosize: true, symbol: `BYBIT:${tvSt.coin}USDT.P`, interval: tvSt.tf, timezone: "Asia/Seoul",
+      theme: dark ? "dark" : "light", style: "1", locale: "kr", allow_symbol_change: true, save_image: true, hide_side_toolbar: false,
+      studies: ["IchimokuCloud@tv-basicstudies", "BB@tv-basicstudies", "RSI@tv-basicstudies"],
+    });
+  }
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (document.body.dataset.v === "vTV") renderTV(); else tvKey = ""; });
+
   // 홈의 분석 자료 버튼: 코인 고르면 바로 만듦 (차트 화면은 숨겨 두고 뒤에서 씀)
   $("hAna").onclick = () => {
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
