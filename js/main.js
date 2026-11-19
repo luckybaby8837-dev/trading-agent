@@ -109,14 +109,14 @@
 
   // ---------- 탭 ----------
   let lastTab = "vHome";
-  const isSub = (v) => v === "vSet" || v === "vAcct" || v === "vChart" || /^vT[A-Z]/.test(v);
+  const isSub = (v) => v === "vSet" || v === "vAcct" || /^vT[A-Z]/.test(v);
   function showView(v, fromBack) {
     const cur = document.body.dataset.v;
     if (!fromBack && v !== cur) {
       if (isSub(v)) pushLayer({ type: "view", back: cur || "vHome" });
       else layers = layers.filter((l) => l.type !== "view");
     }
-    const tabV = /^vT[A-Z]/.test(v) ? "vTeam" : v === "vAcct" || v === "vChart" ? "vHome" : v;
+    const tabV = /^vT[A-Z]/.test(v) ? "vTeam" : v === "vAcct" ? "vHome" : v;
     document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === tabV));
     document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
     document.body.dataset.v = v;
@@ -927,7 +927,7 @@
       const t = st.tick[c] || {}, p = price(c), k = kimp(c);
       return `<button class="tick" data-c="${c}"><span class="t1">${c}<span class="chg ${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</span></span><b>${p ? Chart.fmtP(p) : "—"}</b><small>김프 <span class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</span> · 차트 ›</small></button>`;
     }).join("");
-    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); showView("vChart"); });
+    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); lastTab = "vChart"; showView("vChart"); });
   }
   // 진행 중 포지션에 그때그때 생각 적기 (포지션 기록의 notes에 시간순으로 쌓임)
   async function addNote(id, text) {

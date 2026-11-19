@@ -21,9 +21,8 @@ const Chart = (() => {
     if (!show.band || !bars.length) return;
     const p = bars[bars.length - 1].c, col = css("--band") || "#e8a23d";
     const add = (price, title) => bandLines.push(S.candle.createPriceLine({ price, color: col, title, lineStyle: 2, lineWidth: 1, axisLabelVisible: true }));
-    const r = Math.round(BAND * LEV * 100);
-    add(p * (1 + BAND), `+1% · ${LEV}배 ${r}%`);
-    add(p * (1 - BAND), `-1% · ${LEV}배 ${r}%`);
+    add(p * (1 + BAND), "+1%");
+    add(p * (1 - BAND), "-1%");
   }
   let bandP = 0;
   let log = Store.pref.get("log", true);
