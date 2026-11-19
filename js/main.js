@@ -93,6 +93,10 @@
 
   // 차트 그림 찍기 (다른 탭에 있어도 잠깐 화면 밖에 펼쳐서 찍음)
   async function chartShot() {
+    const c = await chartCanvas();
+    return c ? shrinkUrl(c.toDataURL("image/png"), 1600) : null;
+  }
+  async function chartCanvas() {
     const v = $("vChart"), hidden = !v.classList.contains("on");
     if (hidden) {
       Object.assign(v.style, { display: "flex", flexDirection: "column", position: "fixed", left: "-10000px", top: "0", width: "1100px", height: "640px" });
@@ -100,7 +104,7 @@
     }
     const c = Chart.snapshot();
     if (hidden) { v.removeAttribute("style"); fitChartView(); await new Promise((r) => setTimeout(r, 50)); }
-    return c ? shrinkUrl(c.toDataURL("image/png"), 1600) : null;
+    return c;
   }
 
   // ---------- 탭 ----------
@@ -312,7 +316,16 @@
   };
 
   // 분석 자료
-  $("anaBtn").onclick = async () => {
+  // 홈의 분석 자료 버튼: 코인 고르면 바로 만듦 (차트 화면은 숨겨 두고 뒤에서 씀)
+  $("hAna").onclick = () => {
+    sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
+      <p class="mut sm" style="margin-top:0">어떤 코인을 볼까요?</p>
+      <div class="row">${Market.COINS.map((c) => `<button class="primary" data-ac="${c}">${c}</button>`).join("")}</div>`);
+    $("shX").onclick = closeSheet;
+    document.querySelectorAll("[data-ac]").forEach((b) => b.onclick = async () => { await setChart(b.dataset.ac); runAnalysis(); });
+  };
+  $("anaBtn").onclick = () => runAnalysis();
+  async function runAnalysis() {
     stopTool();
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div><p class="mut sm">만드는 중이에요… (시간봉 5개를 함께 읽어요)</p>`);
     $("shX").onclick = closeSheet;
@@ -335,12 +348,12 @@
       toast("분석 글을 복사했어요");
     };
     $("cpImg").onclick = async () => {
-      const c = Chart.snapshot(); if (!c) { toast("차트를 그리지 못했어요"); return; }
+      const c = await chartCanvas(); if (!c) { toast("차트를 그리지 못했어요"); return; }
       const r = await Analysis.copyImage(c);
       toast(r === "copied" ? "차트 그림을 복사했어요" : "차트 그림을 저장했어요 (사진으로 첨부하세요)");
     };
     $("opClaude").onclick = () => window.open("https://claude.ai/new", "_blank", "noopener");
-  };
+  }
 
   // ---------- 매매 ----------
   const venueName = { bybit: "바이비트", upbit: "업비트" };
@@ -914,7 +927,7 @@
       const t = st.tick[c] || {}, p = price(c), k = kimp(c);
       return `<button class="tick" data-c="${c}"><span class="t1">${c}<span class="chg ${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</span></span><b>${p ? Chart.fmtP(p) : "—"}</b><small>김프 <span class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</span></small></button>`;
     }).join("");
-    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); lastTab = "vChart"; showView("vChart"); });
+    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => window.open(`https://www.tradingview.com/chart/?symbol=BYBIT%3A${b.dataset.c}USDT.P`, "_blank", "noopener"));
   }
   // 진행 중 포지션에 그때그때 생각 적기 (포지션 기록의 notes에 시간순으로 쌓임)
   async function addNote(id, text) {
@@ -1348,7 +1361,7 @@
         : `<p class="mut sm" style="margin-bottom:0">같은 조건의 매매가 5건 이상 쌓이면 잘 되는 것 · 안 되는 것을 골라 줘요.</p>`);
     $("dsBody").innerHTML = body;
   }
-  $("tcGo").onclick = () => { lastTab = "vChart"; showView("vChart"); setTimeout(() => $("anaBtn").click(), 200); };
+  $("tcGo").onclick = () => $("hAna").click();
 
   async function renderTTrend() {
     const draw = () => {
