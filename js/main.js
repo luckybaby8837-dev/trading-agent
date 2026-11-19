@@ -109,20 +109,19 @@
 
   // ---------- 탭 ----------
   let lastTab = "vHome";
-  const isSub = (v) => v === "vSet" || v === "vAcct" || /^vT[A-Z]/.test(v);
+  const isSub = (v) => v === "vSet" || v === "vAcct" || v === "vChart" || /^vT[A-Z]/.test(v);
   function showView(v, fromBack) {
     const cur = document.body.dataset.v;
     if (!fromBack && v !== cur) {
       if (isSub(v)) pushLayer({ type: "view", back: cur || "vHome" });
       else layers = layers.filter((l) => l.type !== "view");
     }
-    const tabV = /^vT[A-Z]/.test(v) ? "vTeam" : v === "vAcct" ? "vHome" : v;
+    const tabV = /^vT[A-Z]/.test(v) ? "vTeam" : v === "vAcct" || v === "vChart" ? "vHome" : v;
     document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === tabV));
     document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
     document.body.dataset.v = v;
     scrollTo(0, 0);
     if (v === "vChart") fitChartView();
-    if (v === "vTV") renderTV();
     if (v === "vHome") renderHome();
     if (v === "vSet") { renderSet(); if (!Upbit.local) ubView(Upbit.status, { local: false }); }
     if (v === "vTeam") renderTeamList();
@@ -317,30 +316,6 @@
   };
 
   // 분석 자료
-  // 차트 탭 = 트레이딩뷰 위젯 (지표·선 그리기는 트레이딩뷰 그대로, 로그인 계정과는 별개)
-  let tvKey = "", tvLoad = null;
-  const tvSt = { coin: Store.pref.get("tvCoin", "BTC"), tf: Store.pref.get("tvTf", "240") };
-  const TV_TF = [["15분", "15"], ["1시간", "60"], ["4시간", "240"], ["일봉", "D"], ["주봉", "W"]];
-  function loadTVLib() {
-    if (window.TradingView) return Promise.resolve();
-    return (tvLoad = tvLoad || new Promise((ok, no) => { const s = document.createElement("script"); s.src = "https://s3.tradingview.com/tv.js"; s.onload = ok; s.onerror = () => { tvLoad = null; no(); }; document.head.appendChild(s); }));
-  }
-  async function renderTV(force) {
-    seg($("tvCoin"), Market.COINS.map((c) => [c, c]), tvSt.coin, (c) => { tvSt.coin = c; Store.pref.set("tvCoin", c); renderTV(); });
-    seg($("tvTf"), TV_TF, tvSt.tf, (t) => { tvSt.tf = t; Store.pref.set("tvTf", t); renderTV(); });
-    const dark = matchMedia("(prefers-color-scheme: dark)").matches, key = [tvSt.coin, tvSt.tf, dark].join("|");
-    if (key === tvKey && !force && $("tvBox").firstChild) return;
-    tvKey = key;
-    try { await loadTVLib(); } catch { $("tvBox").innerHTML = `<p class="mut sm" style="padding:16px">트레이딩뷰를 불러오지 못했어요. 인터넷 연결을 확인해 주세요.</p>`; tvKey = ""; return; }
-    $("tvBox").innerHTML = `<div id="tvW" style="width:100%;height:100%"></div>`;
-    new TradingView.widget({
-      container_id: "tvW", autosize: true, symbol: `BYBIT:${tvSt.coin}USDT.P`, interval: tvSt.tf, timezone: "Asia/Seoul",
-      theme: dark ? "dark" : "light", style: "1", locale: "kr", allow_symbol_change: true, save_image: true, hide_side_toolbar: false,
-      studies: ["IchimokuCloud@tv-basicstudies", "BB@tv-basicstudies", "RSI@tv-basicstudies"],
-    });
-  }
-  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (document.body.dataset.v === "vTV") renderTV(); else tvKey = ""; });
-
   // 홈의 분석 자료 버튼: 코인 고르면 바로 만듦 (차트 화면은 숨겨 두고 뒤에서 씀)
   $("hAna").onclick = () => {
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
@@ -950,9 +925,9 @@
   function renderTicks() {
     $("hTick").innerHTML = Market.COINS.map((c) => {
       const t = st.tick[c] || {}, p = price(c), k = kimp(c);
-      return `<button class="tick" data-c="${c}"><span class="t1">${c}<span class="chg ${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</span></span><b>${p ? Chart.fmtP(p) : "—"}</b><small>김프 <span class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</span></small></button>`;
+      return `<button class="tick" data-c="${c}"><span class="t1">${c}<span class="chg ${sgn(t.chg || 0)}">${t.chg != null ? pctS(t.chg) : "—"}</span></span><b>${p ? Chart.fmtP(p) : "—"}</b><small>김프 <span class="${sgn(k || 0)}">${k == null ? "—" : pctS(k)}</span> · 차트 ›</small></button>`;
     }).join("");
-    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => window.open(`https://www.tradingview.com/chart/?symbol=BYBIT%3A${b.dataset.c}USDT.P`, "_blank", "noopener"));
+    $("hTick").querySelectorAll(".tick").forEach((b) => b.onclick = () => { pickCoin(b.dataset.c); showView("vChart"); });
   }
   // 진행 중 포지션에 그때그때 생각 적기 (포지션 기록의 notes에 시간순으로 쌓임)
   async function addNote(id, text) {
@@ -1386,7 +1361,7 @@
         : `<p class="mut sm" style="margin-bottom:0">같은 조건의 매매가 5건 이상 쌓이면 잘 되는 것 · 안 되는 것을 골라 줘요.</p>`);
     $("dsBody").innerHTML = body;
   }
-  $("tcGo").onclick = () => $("hAna").click();
+  $("tcGo").onclick = () => { showView("vChart"); setTimeout(() => $("anaBtn").click(), 200); };
 
   async function renderTTrend() {
     const draw = () => {

@@ -70,10 +70,6 @@ main{padding:0 0 calc(var(--tab) + env(safe-area-inset-bottom) + 12px)}
 .tools-g button{min-height:38px;padding:6px 11px;font-size:13px;white-space:nowrap;display:flex;align-items:center;gap:5px}
 .tools-g button svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round}
 .tools-g button.on{background:var(--ac-soft);border-color:var(--ac);color:var(--ac)}
-#vTV{max-width:none;padding:8px 12px 0}
-#vTV.on{display:flex;flex-direction:column;height:calc(100dvh - var(--top) - var(--tab) - env(safe-area-inset-bottom) - env(safe-area-inset-top) - 12px)}
-.tvWrap{flex:1;min-height:320px;border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--chart-bg)}
-.tvWrap iframe{border:0}
 .chartWrap{position:relative;flex:1;min-height:260px;border:1px solid var(--bd);border-radius:14px;overflow:hidden;background:var(--chart-bg)}
 #chart{position:absolute;inset:0}
 .overlay{position:absolute;inset:0;z-index:3;pointer-events:none;touch-action:none}
