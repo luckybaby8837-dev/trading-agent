@@ -316,14 +316,14 @@
   };
 
   // 분석 자료
-  // 홈의 분석 자료 버튼: 코인 고르면 바로 만듦 (차트 화면은 숨겨 두고 뒤에서 씀)
-  $("hAna").onclick = () => {
+  // 데이터 분석가 화면의 분석 자료 버튼: 코인 고르면 바로 만듦 (차트 화면은 뒤에서 씀)
+  function openAna() {
     sheet(`<div class="sh"><h2>분석 자료</h2><button class="ghost" id="shX">닫기</button></div>
       <p class="mut sm" style="margin-top:0">어떤 코인을 볼까요?</p>
       <div class="row">${Market.COINS.map((c) => `<button class="primary" data-ac="${c}">${c}</button>`).join("")}</div>`);
     $("shX").onclick = closeSheet;
     document.querySelectorAll("[data-ac]").forEach((b) => b.onclick = async () => { await setChart(b.dataset.ac); runAnalysis(); });
-  };
+  }
   $("anaBtn").onclick = () => runAnalysis();
   async function runAnalysis() {
     stopTool();
@@ -1361,7 +1361,7 @@
         : `<p class="mut sm" style="margin-bottom:0">같은 조건의 매매가 5건 이상 쌓이면 잘 되는 것 · 안 되는 것을 골라 줘요.</p>`);
     $("dsBody").innerHTML = body;
   }
-  $("tcGo").onclick = () => { showView("vChart"); setTimeout(() => $("anaBtn").click(), 200); };
+  $("tcGo").onclick = () => openAna();
 
   async function renderTTrend() {
     const draw = () => {
