@@ -12,6 +12,7 @@ const Chart = (() => {
   let drawings = [], tool = null, temp = [], hover = null, onDrawDone = null, magnet = true;
   let show = Store.pref.get("show", { ichi: true, bb: true, vol: true, rsi: true });
   if (show.band == null) show.band = true;
+  if (show.dbl == null) show.dbl = true; // RSI 쌍바닥
   // 손절 범위: 현재가 위아래 1% (20배면 자산 20%)
   const BAND = 0.01, LEV = 20;
   let bandLines = [];
@@ -99,6 +100,7 @@ const Chart = (() => {
     if (!bars.length) return;
     const ms = Market.TF[tf].ms, n = bars.length, last = bars[n - 1].t;
     ind = { ichi: Ind.ichimoku(bars), bb: Ind.bollinger(bars), rsi: Ind.rsi(bars), volMa: Ind.sma(bars.map((b) => b.v), 20) };
+    ind.dbl = Ind.rsiDouble(bars, ind.bb, ind.rsi);
     const T = (i) => lt(i < n ? bars[i].t : last + (i - n + 1) * ms);
     const ser = (arr, shift = 0, extra = 0) => {
       const out = [];
@@ -110,7 +112,14 @@ const Chart = (() => {
     };
     const sh = ind.ichi.shift - 1; // 26번째 봉 위치(현재 봉 포함)로 앞당겨 그림
     {
-      S.candle.setData(bars.map((b) => ({ time: lt(b.t), open: b.o, high: b.h, low: b.l, close: b.c })));
+      // RSI 쌍바닥: 지켜볼 캔들 노랑, 롱 진입 파랑, 숏 진입 보라
+      const cW = css("--db-watch"), cL = css("--db-long"), cS = css("--db-short");
+      const ent = new Map(show.dbl ? ind.dbl.entries.map((e) => [e.i, e.dir > 0 ? cL : cS]) : []);
+      S.candle.setData(bars.map((b, i) => {
+        const col = ent.get(i) || (show.dbl && ind.dbl.watch.has(i) ? cW : null);
+        const d = { time: lt(b.t), open: b.o, high: b.h, low: b.l, close: b.c };
+        return col ? { ...d, color: col, borderColor: col, wickColor: col } : d;
+      }));
       const vis = (s, on) => s.applyOptions({ visible: on });
       S.tenkan.setData(ser(ind.ichi.tenkan)); S.kijun.setData(ser(ind.ichi.kijun));
       S.spanA.setData(ser(ind.ichi.spanA, sh, sh)); S.spanB.setData(ser(ind.ichi.spanB, sh, sh));
@@ -184,12 +193,31 @@ const Chart = (() => {
     if (show.ichi) cloud(P);
     if (show.rsi) rsiGuides(P);
     ctx.beginPath(); ctx.rect(0, 0, P.w, P.ph); ctx.clip();
+    if (show.dbl) dblPaint(P);
     for (const d of drawings) paint(d, P, false);
     if (tool && temp.length && hover) paint(preview(), P, true);
     ctx.restore();
     if (show.rsi) rsiAxis(P, W);
   }
   // 가격 눈금이 RSI 칸까지 내려오지 않게 가리고, RSI 눈금을 따로 표시
+  // 쌍바닥 선(두 바닥을 이음) + 손절·목표 점선 (진입 봉부터 12칸)
+  function dblPaint(P) {
+    const cL = css("--db-long"), cS = css("--db-short"), cSL = css("--dn"), cTP = css("--up");
+    for (const e of ind.dbl.entries) {
+      const x1 = X(bars[e.b1.i].t), x2 = X(bars[e.b2.i].t), xe = X(bars[e.i].t);
+      if (xe == null || xe < -200 || xe > P.w + 200) continue;
+      const xr = X(bars[e.i].t + 12 * ms());
+      ctx.save();
+      ctx.strokeStyle = e.dir > 0 ? cL : cS; ctx.lineWidth = 1.6; ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x1, Y(e.b1.p)); ctx.lineTo(x2, Y(e.b2.p)); ctx.stroke();
+      ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      for (const [p, c] of [[e.sl, cSL], [e.tp, cTP], [e.en, e.dir > 0 ? cL : cS]]) {
+        const y = Y(p); if (y == null) continue;
+        ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(xe, y); ctx.lineTo(xr, y); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
   function rsiAxis(P, W) {
     ctx.fillStyle = css("--chart-bg");
     ctx.fillRect(P.w + 1, P.ph - 7, W - P.w, P.h - P.ph + 6);
