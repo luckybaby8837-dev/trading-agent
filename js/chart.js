@@ -196,7 +196,11 @@ const Chart = (() => {
   const X = (t) => chart.timeScale().logicalToCoordinate(tToL(t));
   const Y = (p) => S.candle.priceToCoordinate(p);
   // 선은 로그 가격 기준으로 직선 (로그 차트에서 곧게 보임)
-  const lineAt = (a, b, t) => Math.exp(Math.log(a.p) + (Math.log(b.p) - Math.log(a.p)) * (t - a.t) / ((b.t - a.t) || 1));
+  // 로그 차트면 로그 가격 기준 직선, 일반 차트면 일반 가격 기준 직선 (어느 쪽이든 화면에서 곧게 보임)
+  const lineAt = (a, b, t) => { const k = (t - a.t) / ((b.t - a.t) || 1); return log ? Math.exp(Math.log(a.p) + (Math.log(b.p) - Math.log(a.p)) * k) : a.p + (b.p - a.p) * k; };
+  // 채널 폭: 로그면 비율, 일반이면 가격 차이
+  const offOf = (p, base) => (log ? Math.log(p) - Math.log(base) : p - base);
+  const shiftP = (p, off) => (log ? p * Math.exp(off) : p + off);
 
   function pane() {
     const w = el.clientWidth - chart.priceScale("right").width();
@@ -332,9 +336,9 @@ const Chart = (() => {
       return { segs: [seg(d.a, d.b, d.a.t, d.b.t)], ext: [seg(d.a, d.b, Math.max(d.a.t, d.b.t), end)] };
     }
     if (d.type === "channel") {
-      const off = Math.log(d.c.p) - Math.log(lineAt(d.a, d.b, d.c.t));
-      const a2 = { t: d.a.t, p: d.a.p * Math.exp(off) }, b2 = { t: d.b.t, p: d.b.p * Math.exp(off) };
-      const m1 = { t: d.a.t, p: d.a.p * Math.exp(off / 2) }, m2 = { t: d.b.t, p: d.b.p * Math.exp(off / 2) };
+      const off = offOf(d.c.p, lineAt(d.a, d.b, d.c.t));
+      const a2 = { t: d.a.t, p: shiftP(d.a.p, off) }, b2 = { t: d.b.t, p: shiftP(d.b.p, off) };
+      const m1 = { t: d.a.t, p: shiftP(d.a.p, off / 2) }, m2 = { t: d.b.t, p: shiftP(d.b.p, off / 2) };
       const t0 = Math.min(d.a.t, d.b.t), t1 = Math.max(d.a.t, d.b.t), end = Math.max(right, t1);
       return { segs: [seg(d.a, d.b, t0, t1), seg(a2, b2, t0, t1)], mid: [seg(m1, m2, t0, t1)], ext: [seg(d.a, d.b, t1, end), seg(a2, b2, t1, end)], fill: [d.a, d.b, a2, b2, t0, t1] };
     }
@@ -357,8 +361,7 @@ const Chart = (() => {
     return { segs: [] };
   }
   function seg(a, b, t0, t1) {
-    // 로그 직선을 화면에 그릴 때 선형 차트에서도 맞도록 잘게 나눔
-    const N = log ? 1 : 24, pts = [];
+    const N = 1, pts = [];
     for (let i = 0; i <= N; i++) { const t = t0 + (t1 - t0) * i / N; pts.push(X(t), Y(lineAt(a, b, t))); }
     return pts;
   }
@@ -466,8 +469,8 @@ const Chart = (() => {
     if (d.type === "hline") return { kind: "수평선", price: d.p };
     if (d.type === "tline") return { kind: "추세선", now: lineAt(d.a, d.b, t), from: d.a, to: d.b };
     if (d.type === "channel") {
-      const lo = lineAt(d.a, d.b, t), off = Math.log(d.c.p) - Math.log(lineAt(d.a, d.b, d.c.t)), hi = lo * Math.exp(off);
-      return { kind: "평행채널", line1: lo, line2: hi, mid: lo * Math.exp(off / 2), from: d.a, to: d.b };
+      const lo = lineAt(d.a, d.b, t), off = offOf(d.c.p, lineAt(d.a, d.b, d.c.t)), hi = shiftP(lo, off);
+      return { kind: "평행채널", line1: lo, line2: hi, mid: shiftP(lo, off / 2), from: d.a, to: d.b };
     }
     if (d.type === "fib") return { kind: "피보나치", from: d.a, to: d.b, levels: FIB.map((r) => [r, d.b.p + (d.a.p - d.b.p) * r]) };
     if (d.type === "fibx") return { kind: "확장 피보나치", from: d.a, to: d.b, at: d.c, levels: FIBX.map((r) => [r, fibxP(d, r)]) };
