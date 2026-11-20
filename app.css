@@ -363,3 +363,5 @@ body.mkOpen{overflow:hidden}
 
 .calAll{display:block;width:100%;margin:8px 0 4px}
 #trCal .tgroup.cal{margin-bottom:10px}
+.nowBtn{position:absolute;right:72px;top:8px;z-index:6;background:var(--ac);color:#fff;border:0;border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;box-shadow:var(--shadow);min-height:0}
+.nowBtn[hidden]{display:none}

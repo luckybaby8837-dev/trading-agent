@@ -75,6 +75,16 @@ const Chart = (() => {
     ["pointerdown", "wheel", "touchstart"].forEach((e) => el.addEventListener(e, () => (moved = true), { passive: true }));
     let lastW = 0;
     new ResizeObserver(() => { const w = el.clientWidth; if (Math.abs(w - lastW) > 30 && !moved && bars.length) fitRecent(); lastW = w; }).observe(el);
+    // 현재로 버튼: 예전 차트를 보고 있을 때만 보임
+    nowBtn = document.createElement("button");
+    nowBtn.className = "nowBtn"; nowBtn.type = "button"; nowBtn.hidden = true; nowBtn.textContent = "현재로 ›";
+    nowBtn.onclick = () => goNow();
+    el.appendChild(nowBtn);
+    chart.timeScale().subscribeVisibleLogicalRangeChange((r) => {
+      if (!r || !bars.length) return;
+      nowBtn.hidden = r.to >= bars.length - 1;
+      if (r.from < 60) loadOlder(); // 왼쪽 끝 가까이 오면 예전 캔들 더 불러옴
+    });
     loop();
   }
 
@@ -85,9 +95,31 @@ const Chart = (() => {
 
   // ---------- 데이터 ----------
   function setData(c, t, list) {
-    coin = c; tf = t; bars = list;
+    coin = c; tf = t; bars = list; older = { busy: false, done: false, key: c + "|" + t };
     recalc(true);
-    moved = false; fitRecent(); requestAnimationFrame(fitRecent);
+    goNow(); requestAnimationFrame(fitRecent);
+  }
+  // 현재(가장 최근 캔들)로 돌아오기 + 가격 축 자동 맞춤 (코인 바꿔도 현재 차트가 보이게)
+  function goNow() {
+    moved = false;
+    chart.priceScale("right").applyOptions({ autoScale: true });
+    fitRecent();
+  }
+  // 예전 캔들 더 불러오기 (한 번에 1000개, 최대 2만 개)
+  let older = { busy: false, done: false, key: "" }, nowBtn = null;
+  async function loadOlder() {
+    if (older.busy || older.done || !bars.length || bars.length >= 20000) return;
+    const key = older.key, st = older; st.busy = true;
+    try {
+      const more = (await Market.klines(coin, tf, 1000, bars[0].t - 1)).filter((b) => b.t < bars[0].t);
+      if (st.key !== key || older !== st) return; // 그사이 코인·시간 바뀜
+      if (!more.length) { st.done = true; return; }
+      const r = chart.timeScale().getVisibleLogicalRange();
+      bars = more.concat(bars);
+      recalc(true);
+      if (r) chart.timeScale().setVisibleLogicalRange({ from: r.from + more.length, to: r.to + more.length });
+      if (more.length < 1000) st.done = true;
+    } catch { /* 다음에 다시 시도 */ } finally { st.busy = false; }
   }
   // 최근 봉이 화면에 보기 좋게 들어오도록 (화면 폭에 맞춰 봉 간격 조절)
   let moved = false;

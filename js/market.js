@@ -10,9 +10,10 @@ const Market = (() => {
   };
   const COINS = ["BTC", "ETH"];
 
-  async function klines(coin, tf, count = 1000) {
+  // before: 이 시각 이전 캔들만 (예전 차트 더 불러올 때)
+  async function klines(coin, tf, count = 1000, before) {
     const iv = TF[tf].iv, out = new Map();
-    let end = Date.now();
+    let end = before || Date.now();
     while (out.size < count) {
       const need = Math.min(1000, count - out.size);
       const r = await fetch(`${BYBIT}/v5/market/kline?category=linear&symbol=${coin}USDT&interval=${iv}&limit=${need}&end=${end}`);
