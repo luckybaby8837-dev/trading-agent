@@ -200,21 +200,15 @@ const Chart = (() => {
     if (show.rsi) rsiAxis(P, W);
   }
   // 가격 눈금이 RSI 칸까지 내려오지 않게 가리고, RSI 눈금을 따로 표시
-  // 쌍바닥 선(두 바닥을 이음) + 손절·목표 점선 (진입 봉부터 12칸)
+  // 쌍바닥 선: 두 바닥(두 꼭대기)을 이음
   function dblPaint(P) {
-    const cL = css("--db-long"), cS = css("--db-short"), cSL = css("--dn"), cTP = css("--up");
+    const cL = css("--db-long"), cS = css("--db-short");
     for (const e of ind.dbl.entries) {
-      const x1 = X(bars[e.b1.i].t), x2 = X(bars[e.b2.i].t), xe = X(bars[e.i].t);
-      if (xe == null || xe < -200 || xe > P.w + 200) continue;
-      const xr = X(bars[e.i].t + 12 * ms());
+      const x1 = X(bars[e.b1.i].t), x2 = X(bars[e.b2.i].t);
+      if (x2 == null || x2 < -200 || x1 > P.w + 200) continue;
       ctx.save();
       ctx.strokeStyle = e.dir > 0 ? cL : cS; ctx.lineWidth = 1.6; ctx.setLineDash([]);
       ctx.beginPath(); ctx.moveTo(x1, Y(e.b1.p)); ctx.lineTo(x2, Y(e.b2.p)); ctx.stroke();
-      ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
-      for (const [p, c] of [[e.sl, cSL], [e.tp, cTP], [e.en, e.dir > 0 ? cL : cS]]) {
-        const y = Y(p); if (y == null) continue;
-        ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(xe, y); ctx.lineTo(xr, y); ctx.stroke();
-      }
       ctx.restore();
     }
   }
