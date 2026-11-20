@@ -1308,7 +1308,7 @@
   const TEAMS = [
     { id: "vTRisk", name: "🛡 리스크 매니저", role: "손절 · 수량 · 레버리지 · 하루 손실 한도 · 거부권", sum: () => { const r = riskChecks(); if (r.length) return r[0].text + (r.length > 1 ? ` 외 ${r.length - 1}건` : ""); const eq = futEq(), c = riskCfg(); return eq ? `이상 없음 · 오늘 손실 여유 ${Math.max(0, c.day + todayFutPnl() / eq * 100).toFixed(1)}%` : "바이비트 자산을 알면 % 기준으로 심사해요"; }, warn: () => riskChecks().length > 0 },
     { id: "vTMind", name: "🧠 심리 코치", role: "복수 매매 · 연속 손절 · 과매매 · 근거 없는 진입", sum: () => { const w = mindChecks().filter((x) => x.lv === "warn"); return w.length ? w[0].text + (w.length > 1 ? ` 외 ${w.length - 1}건` : "") : "지금은 차분해요"; }, warn: () => mindChecks().some((x) => x.lv === "warn") },
-    { id: "vTTalk", name: "🛋 상담사", role: "내 이야기를 들어주는 대화 상대", sum: () => { const t = tiltScore(); return Counsel.hasKey() ? (t.v >= 30 ? `틸트 ${t.v}점 · 이야기 나눠 볼까요?` : "언제든 털어놓으세요") : "Claude API 열쇠를 넣으면 대화할 수 있어요"; } },
+    { id: "vTTalk", name: "🛋 상담사", role: "내 이야기를 들어주는 대화 상대", sum: () => { const t = tiltScore(); return t.v >= 30 ? `틸트 ${t.v}점 · 이야기 나눠 볼까요?` : "언제든 털어놓으세요"; } },
     { id: "vTData", name: "📊 데이터 분석가", role: "근거 · 시간봉 · 요일 · 시간대 · 심리별 성과", sum: () => { const es = entries(daysAgo(89)).filter((e) => e.closed && e.pl != null && e.cd >= daysAgo(89)); const w = es.filter((e) => e.pl > 0).length; return es.length ? `최근 90일 ${es.length}건 · 승률 ${Math.round(w / es.length * 100)}%` : "종료한 매매가 쌓이면 성과를 나눠 보여줘요"; } },
   ];
   function renderTeamList() {
@@ -1544,7 +1544,7 @@
   $("taCopy").onclick = () => copyText(auditText(taDays), `최근 ${taDays}일 복기 자료를 복사했어요`);
 
   // ---------- 상담사 ----------
-  let talk = null, talking = false;
+  let talk = null;
   function talkContext() {
     const t = tiltScore(), w = weekStats(7), td = today(), L = [];
     L.push(`오늘 ${td} ${nowHM()} · 틸트 점수 ${t.v}/100${t.parts.length ? ` (${t.parts.map((p) => p.why).join(", ")})` : ""}`);
@@ -1560,70 +1560,23 @@
     for (const j of past) L.push(`지난 상담 ${j.date} 일부: ${(j.text || "").replace(/\s+/g, " ").slice(-400)}`);
     return L.join("\n");
   }
-  const talkText = (msgs) => msgs.map((m) => `${m.role === "user" ? "나" : "상담사"}: ${m.content}`).join("\n");
-  async function saveTalk() {
-    if (!talk || !talk.msgs.length) return;
-    const old = st.journal.find((j) => j.id === talk.id);
-    await Store.put("journal", Object.assign(old || { id: talk.id, kind: "talk", date: talk.date, time: talk.time, mood: [] }, { text: talkText(talk.msgs), msgs: talk.msgs, ctx: talk.ctx }));
-    await loadData();
-  }
-  function startTalk(resume) {
-    const td = today(), prev = resume ? st.journal.find((j) => j.kind === "talk" && j.date === td && Array.isArray(j.msgs)) : null;
-    talk = prev ? { id: prev.id, date: prev.date, time: prev.time, msgs: prev.msgs.slice(), ctx: prev.ctx || talkContext() }
-      : { id: "talk_" + Date.now().toString(36), date: td, time: nowHM(), msgs: [], ctx: null };
-    if (!talk.ctx) talk.ctx = talkContext();
-  }
   function talkHello() {
     const t = tiltScore();
-    if (t.lv === "hot") return "오늘 많이 힘드셨던 것 같아요. 지금 마음이 어떤지, 생각나는 대로 편하게 말해 주세요. 천천히 들을게요.";
-    if (t.lv === "warm") return "조금 마음이 흔들리는 날 같아요. 지금 어떤 기분인지 들려줄래요?";
+    if (t.lv === "hot") return "오늘 많이 힘드셨던 것 같아요. 지금 마음을 적고 Claude에서 천천히 이야기해요.";
+    if (t.lv === "warm") return "조금 마음이 흔들리는 날 같아요. 지금 어떤 기분인지 적어 볼래요?";
     return "안녕하세요. 오늘 하루, 그리고 매매하면서 어떤 마음이었는지 편하게 이야기해 주세요.";
   }
-  function drawTalk(streamText) {
-    const msgs = talk ? talk.msgs : [];
-    const bub = (role, text, cls = "") => `<div class="bub ${role}${cls}">${esc(text).replace(/\n/g, "<br>")}</div>`;
-    $("tkLog").innerHTML = bub("as", talkHello()) + msgs.map((m) => bub(m.role === "user" ? "me" : "as", m.content)).join("")
-      + (streamText != null ? bub("as", streamText || "…", " typing") : "");
-    $("tkLog").lastElementChild.scrollIntoView({ block: "end" });
-  }
-  function talkSetup(show) {
-    $("tkSetup").hidden = !show;
-    if (show) { $("tkKey").value = ""; setTimeout(() => $("tkKey").focus(), 50); }
-  }
-  function renderTalk() {
-    if (!talk) startTalk(true);
-    talkSetup(!Counsel.hasKey());
-    drawTalk();
-  }
-  $("tkKeySave").onclick = () => {
-    const k = $("tkKey").value.trim();
-    if (!/^sk-ant-/.test(k)) { toast("sk-ant- 로 시작하는 열쇠를 넣어 주세요"); return; }
-    Counsel.setKey(k); $("tkKey").value = ""; talkSetup(false); toast("상담사를 연결했어요");
+  function renderTalk() { $("tkLog").innerHTML = `<div class="bub as">${esc(talkHello())}</div>`; }
+  $("tkGo").onclick = async () => {
+    const feel = $("tkIn").value.trim();
+    const text = Counsel.PROMPT + "\n\n사용자 상황 (앱 기록):\n" + talkContext() + "\n\n" + (feel ? "지금 내 마음: " + feel : "상담사로서 먼저 말을 걸어 주세요.");
+    copyText(text, "상담 자료를 복사했어요. Claude에 붙여 넣으세요");
+    window.open("https://claude.ai/new", "_blank", "noopener");
+    if (feel) { // 내가 적은 마음은 일지에도 남김
+      await Store.put("journal", { id: "talk_" + Date.now().toString(36), kind: "talk", date: today(), time: nowHM(), mood: [], text: "나: " + feel });
+      $("tkIn").value = ""; await loadData();
+    }
   };
-  $("tkKeyCancel").onclick = () => talkSetup(false);
-  $("tkKeyEdit").onclick = () => talkSetup(true);
-  $("tkNew").onclick = () => { if (talking) return; startTalk(false); drawTalk(); $("tkIn").focus(); };
-  async function sendTalk() {
-    const text = $("tkIn").value.trim();
-    if (!text || talking) return;
-    if (!Counsel.hasKey()) { talkSetup(true); return; }
-    if (!talk) startTalk(true);
-    talk.msgs.push({ role: "user", content: text }); $("tkIn").value = "";
-    talking = true; $("tkSend").disabled = true;
-    let acc = ""; drawTalk("");
-    try {
-      const r = await Counsel.reply(talk.ctx, talk.msgs, (d) => { acc += d; drawTalk(acc); });
-      const out = r.refusal && !r.text ? "이 이야기에는 제가 답하기 어려워요. 다른 방식으로 말해 주시겠어요? 많이 힘드시면 109나 1577-0199에 연락해 주세요." : r.text;
-      talk.msgs.push({ role: "assistant", content: out });
-      await saveTalk();
-    } catch (e) {
-      talk.msgs.pop(); $("tkIn").value = text;
-      if (e.code === "nokey") talkSetup(true);
-      toast(e.message);
-    } finally { talking = false; $("tkSend").disabled = false; drawTalk(); }
-  }
-  $("tkSend").onclick = sendTalk;
-  $("tkIn").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendTalk(); } });
 
   // 홈: 팀 소식 (확인할 것이 있을 때만)
   function renderNews() {

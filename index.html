@@ -109,17 +109,16 @@
 
   <!-- 상담사 -->
   <section id="vTTalk" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛋 상담사</h2><button class="ghost sm" id="tkNew" style="margin-left:auto">새 대화</button></div>
-    <p class="mut sm role">내 이야기를 들어줘요 · 매매 기록과 심리를 알고 대화해요</p>
-    <div class="card" id="tkSetup" hidden>
-      <h3>상담사 연결</h3>
-      <p class="mut sm" style="margin-top:0">Claude API 열쇠가 필요해요. <b>console.anthropic.com</b> → API Keys에서 만들고 크레딧을 충전한 뒤 아래에 넣어 주세요. 열쇠는 <b>이 기기에만</b> 저장돼요 (다른 기기와 동기화 안 함). 쓴 만큼 요금이 나와요.</p>
-      <label for="tkKey">API 열쇠</label><input id="tkKey" type="text" class="secret" autocomplete="off" spellcheck="false" data-lpignore="true" placeholder="sk-ant-...">
-      <div class="row"><button class="primary" id="tkKeySave">저장</button><button id="tkKeyCancel">취소</button></div>
-    </div>
+    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛋 상담사</h2></div>
+    <p class="mut sm role">내 이야기를 들어줘요 · 매매 기록과 심리를 알고 Claude 앱에서 대화해요</p>
     <div class="talk" id="tkLog"></div>
-    <div class="talkBar"><textarea id="tkIn" rows="2" placeholder="지금 마음을 편하게 적어 보세요"></textarea><button class="primary" id="tkSend">보내기</button></div>
-    <p class="mut sm tkNote">대화와 매매 요약이 Claude(Anthropic)로 보내져요. 전문 상담·치료를 대신하지 않아요. 많이 힘들 땐 자살예방상담 <b>109</b> · 정신건강위기상담 <b>1577-0199</b> · 도박문제 상담 <b>1336</b>. <button class="ghost sm" id="tkKeyEdit">열쇠 바꾸기</button></p>
+    <div class="card">
+      <label for="tkIn">지금 마음 (안 적어도 돼요)</label>
+      <textarea id="tkIn" rows="3" placeholder="지금 마음을 편하게 적어 보세요"></textarea>
+      <button class="primary" id="tkGo" style="width:100%;margin-top:8px">복사하고 Claude 열기</button>
+      <p class="mut sm" style="margin:8px 0 0">Claude 앱 새 대화에 <b>붙여 넣기</b>만 하면, 내 매매 상황을 아는 상담사로 대화가 시작돼요. 지금 쓰는 Claude 구독으로 해서 추가 요금이 없어요.</p>
+    </div>
+    <p class="mut sm tkNote">전문 상담·치료를 대신하지 않아요. 많이 힘들 땐 자살예방상담 <b>109</b> · 정신건강위기상담 <b>1577-0199</b> · 도박문제 상담 <b>1336</b>.</p>
   </section>
 
   <!-- 데이터 분석가 -->
