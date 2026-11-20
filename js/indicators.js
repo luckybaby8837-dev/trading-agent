@@ -44,13 +44,16 @@ const Ind = (() => {
     for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= n) s -= arr[i - n]; out[i] = i >= n - 1 ? s / n : null; }
     return out;
   }
-  // RSI 쌍바닥 (로스 카메론): RSI 30 밑 + 하단 밴드 밖 마감 = 지켜볼 자리(노랑) →
-  // 상승 장악형 → 한 번 더 눌린 두 번째 바닥이 밴드 안 → 그 뒤 첫 양봉 마감에 롱(파랑) (빠른 진입, 사용자 방식).
-  // fast:false면 영상 원래대로 두 번째 상승 장악형 마감에 진입.
-  // 손절 = 두 번째 바닥 저가, 목표 = 손절 폭 3배. 숏(보라)은 반대 (RSI 70 위, 상단 밴드).
-  // 마지막(아직 안 끝난) 봉은 진입 판단에서 뺌
-  function rsiDouble(bars, bb, r, o = { lo: 30, hi: 70, rr: 3, wait: 40, fast: true }) {
+  // RSI 쌍바닥 (로스 카메론, 영상 규칙 그대로) — 롱 기준, 숏은 위아래를 뒤집음
+  // 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감 (지켜볼 자리)
+  // 1) RSI 30 밑  2) 큰 음봉 또는 음봉 3개 연속이 하단 밴드 밖에서 마감 (첫 바닥)
+  // 3) 상승 장악형(앞 음봉 몸통을 통째로 덮는 양봉) → 다시 눌린 두 번째 바닥은 높든 낮든 밴드 안
+  // 4) 두 번째 바닥에서 나온 상승 장악형 마감에 롱. 손절 = 두 번째 바닥 저가, 목표 = 손절 폭 3배
+  // 마지막(아직 안 끝난) 봉은 판단에서 뺌
+  function rsiDouble(bars, bb, r, o = { lo: 30, hi: 70, rr: 3, wait: 60, big: 1.5 }) {
     const n = bars.length, watch = new Set(), entries = [];
+    const body = (i) => Math.abs(bars[i].c - bars[i].o);
+    const avgBody = (i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 20); j < i; j++) { s += body(j); k++; } return k ? s / k : 0; };
     const engulf = (i, dir) => {
       if (i < 1) return false;
       const a = bars[i - 1], b = bars[i];
@@ -60,29 +63,29 @@ const Ind = (() => {
     for (const dir of [1, -1]) {
       const ext = (i) => dir > 0 ? bars[i].l : bars[i].h; // 바닥(저가) / 꼭대기(고가)
       const worse = (x, y) => dir > 0 ? x < y : x > y;
+      const against = (i) => dir > 0 ? bars[i].c < bars[i].o : bars[i].c > bars[i].o; // 롱이면 음봉
       const outside = (i) => bb.lo[i] != null && (dir > 0 ? bars[i].c < bb.lo[i] : bars[i].c > bb.up[i]);
       const inside = (i) => bb.lo[i] != null && (dir > 0 ? ext(i) >= bb.lo[i] : ext(i) <= bb.up[i]);
-      const trig = (i) => r[i] != null && (dir > 0 ? r[i] < o.lo : r[i] > o.hi) && outside(i);
-      let st = 0, start = 0, b1 = -1, e1 = -1, b2 = -1, pulled = false;
-      const turn = (i) => dir > 0 ? bars[i].c > bars[i].o : bars[i].c < bars[i].o; // 이번 방향 캔들 (롱=양봉)
+      const rsiOk = (i) => r[i] != null && (dir > 0 ? r[i] < o.lo : r[i] > o.hi);
+      const push = (i) => against(i) && (body(i) >= avgBody(i) * o.big || (i >= 2 && against(i - 1) && against(i - 2))); // 큰 음봉 또는 음봉 3개 연속
+      let st = 0, start = 0, b1 = -1, e1 = -1, b2 = -1;
       for (let i = 0; i < n - 1; i++) {
-        if (trig(i)) { watch.add(i); if (st !== 1) { st = 1; start = i; b1 = i; } }
-        if (st === 0) continue;
-        if (i - start > o.wait) { st = 0; continue; }
-        if (st === 1) { // 첫 바닥 다지는 중 → 첫 장악형 기다림
+        if (rsiOk(i) && outside(i)) watch.add(i);
+        if (rsiOk(i) && outside(i) && push(i)) { if (st !== 1 || b1 < 0) b1 = i; st = 1; start = i; }
+        if (st === 0) { b1 = -1; continue; }
+        if (i - start > o.wait) { st = 0; b1 = -1; continue; }
+        if (st === 1) { // 첫 바닥 → 첫 장악형 기다림
           if (worse(ext(i), ext(b1))) b1 = i;
-          if (engulf(i, dir)) { st = 2; e1 = i; b2 = -1; pulled = false; }
+          if (engulf(i, dir)) { st = 2; e1 = i; b2 = -1; }
           continue;
         }
-        // st 2: 첫 장악형 뒤 → 다시 눌림(두 번째 바닥)과 그 뒤 장악형
-        if (outside(i)) { st = 1; start = i; b1 = i; continue; } // 다시 밴드 밖이면 처음부터
+        // st 2: 첫 장악형 뒤 다시 눌림(두 번째 바닥) → 장악형
+        if (outside(i)) { st = 1; start = i; b1 = i; continue; } // 다시 밴드 밖이면 그게 새 첫 바닥
         if (i > e1 && (b2 < 0 || worse(ext(i), ext(b2)))) b2 = i;
-        const go = o.fast ? pulled && turn(i) : engulf(i, dir);
-        if (i > e1 && !turn(i)) pulled = true; // 반대 캔들 = 다시 눌림
-        if (i > e1 + 1 && go && inside(b2) && inside(i)) {
-          const en = bars[i].c, sl = ext(b2), risk = Math.abs(en - sl); // b2는 첫 장악형 뒤 가장 낮은(높은) 봉, 이번 봉 포함
+        if (i > e1 + 1 && b2 > e1 && engulf(i, dir) && inside(b2)) {
+          const en = bars[i].c, sl = ext(b2), risk = Math.abs(en - sl);
           if (risk > 0) entries.push({ i, dir, b1: { i: b1, p: ext(b1) }, b2: { i: b2, p: ext(b2) }, en, sl, tp: en + dir * risk * o.rr });
-          st = 0;
+          st = 0; b1 = -1;
         }
       }
     }
