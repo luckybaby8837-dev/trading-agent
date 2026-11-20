@@ -48,9 +48,10 @@ const Ind = (() => {
   // 1) 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감하고, ①긴 음봉(최근 20개 평균 몸통의 1.5배) ②음봉 3개 이상 연속 ③역망치형(색 상관없음) 중 하나
   //    역망치형 = 윗꼬리가 몸통의 2배 이상, 아랫꼬리는 몸통 이하·윗꼬리의 1/3 이하 (숏은 위아래 뒤집은 모양)
   // 2) 노란 음봉 몸통을 통째로 덮는 양봉이 마감하면 → 그 뒤 진입 자리를 봄
-  // 3) 진입 구간 = 노란 음봉의 몸통(종가~시가). 눌림이 밴드 안에서 그 구간에 닿으면 진입(파랑, 숏은 보라)
+  // 3) 진입 구간 = 노란 캔들의 몸통. 상자로만 보여 주고 진입 판단은 사용자가 함 (진입 캔들 색칠 안 함)
+  //    상자는 장악 양봉 다음 봉부터 손절가 밖 마감·새 노란 캔들·30봉 지남 중 먼저 오는 때까지
   // 손절 = 노란 캔들(들)의 가장 낮은 저가. 그 아래로 마감하면 무효. 마지막(안 끝난) 봉은 진입 판단에서 뺌
-  function myPull(bars, bb, r, o = { lo: 30, hi: 70, big: 1.5, wait: 60 }) {
+  function myPull(bars, bb, r, o = { lo: 30, hi: 70, big: 1.5, wait: 60, box: 30 }) {
     const n = bars.length, watch = new Set(), setups = [];
     const body = (i) => Math.abs(bars[i].c - bars[i].o);
     const avgBody = (i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 20); j < i; j++) { s += body(j); k++; } return k ? s / k : 0; };
@@ -90,15 +91,9 @@ const Ind = (() => {
           continue;
         }
         if (last) { close(i, null); break; } // 아직 진입 전 → 지금 봉까지 구간 그림
-        const b = bars[i], inBand = bb.lo[i] != null && (dir > 0 ? b.c >= bb.lo[i] : b.c <= bb.up[i]);
+        const b = bars[i];
         if (dir > 0 ? b.c < cur.sl : b.c > cur.sl) { close(i, null); continue; } // 손절가 밖 마감 → 무효
-        const touch = dir > 0 ? b.l <= cur.zTop : b.h >= cur.zBot;
-        if (touch && inBand) {
-          const p = dir > 0 ? Math.min(cur.zTop, b.o) : Math.max(cur.zBot, b.o);
-          close(i, { i, p });
-          continue;
-        }
-        if (i - cur.e > o.wait) close(i, null);
+        if (i - cur.e >= o.box) close(i, null);
       }
     }
     return { watch, setups: setups.sort((a, b) => a.from - b.from), entries: setups.filter((s) => s.entry).map((s) => ({ i: s.entry.i, dir: s.dir })) };

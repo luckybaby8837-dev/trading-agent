@@ -112,9 +112,9 @@ const Chart = (() => {
     };
     const sh = ind.ichi.shift - 1; // 26번째 봉 위치(현재 봉 포함)로 앞당겨 그림
     {
-      // 내 눌림 진입: 노란 캔들, 롱 진입 파랑, 숏 진입 보라
+      // 내 눌림 진입: 노란 캔들만 색칠
       const cW = css("--db-watch"), cL = css("--db-long"), cS = css("--db-short");
-      const ent = new Map(show.dbl ? ind.dbl.entries.map((e) => [e.i, e.dir > 0 ? cL : cS]) : []);
+      const ent = new Map(); // 진입 캔들은 색칠 안 함 (진입 판단은 사용자)
       S.candle.setData(bars.map((b, i) => {
         const col = ent.get(i) || (show.dbl && ind.dbl.watch.has(i) ? cW : null);
         const d = { time: lt(b.t), open: b.o, high: b.h, low: b.l, close: b.c };
@@ -213,9 +213,9 @@ const Chart = (() => {
       if (y1 == null || y2 == null) continue;
       const col = z.dir > 0 ? cL : cS;
       ctx.save();
-      ctx.globalAlpha = z.entry || live ? 0.18 : 0.08; ctx.fillStyle = col;
+      ctx.globalAlpha = live ? 0.2 : 0.12; ctx.fillStyle = col;
       ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.max(2, Math.abs(y2 - y1)));
-      ctx.globalAlpha = z.entry || live ? 0.9 : 0.35; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([]);
+      ctx.globalAlpha = live ? 0.9 : 0.55; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([]);
       ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.max(2, Math.abs(y2 - y1)));
       if (ys != null) { ctx.strokeStyle = cSL; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(x1, ys); ctx.lineTo(x2, ys); ctx.stroke(); }
       ctx.restore();
