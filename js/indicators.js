@@ -98,5 +98,80 @@ const Ind = (() => {
     }
     return { watch, setups: setups.sort((a, b) => a.from - b.from), entries: setups.filter((s) => s.entry).map((s) => ({ i: s.entry.i, dir: s.dir })) };
   }
-  return { ichimoku, bollinger, rsi, sma, myPull };
+  // ---------- 시장 구조 (팔콘 방식) ----------
+  // 스윙 고점·저점: 양옆 k개 봉보다 높은(낮은) 봉. 오른쪽 k개 봉이 끝나야 확정
+  function pivots(bars, k) {
+    const H = [], L = [], n = bars.length;
+    for (let i = k; i < n - k; i++) {
+      let h = true, l = true;
+      for (let j = i - k; j <= i + k && (h || l); j++) {
+        if (j === i) continue;
+        if (j < i ? bars[j].h >= bars[i].h : bars[j].h > bars[i].h) h = false;
+        if (j < i ? bars[j].l <= bars[i].l : bars[j].l < bars[i].l) l = false;
+      }
+      if (h) H.push({ i, p: bars[i].h, h: true });
+      if (l) L.push({ i, p: bars[i].l, h: false });
+    }
+    return { H, L };
+  }
+  // 구조 이탈: 몸통(종가)이 직전 스윙 고점(저점)을 넘어 마감해야 인정
+  //  같은 방향이면 BOS, 추세가 바뀌면 CHoCH, 꼬리만 넘고 다시 들어오면 FB(가짜 돌파)
+  //  강한 저점(롱) = 고점을 깨게 만든 저점, 약한 고점 = 그 뒤 가장 높은 고점(목표)
+  function structure(bars, k = 8) {
+    const n = bars.length, { H, L } = pivots(bars, k), ev = [];
+    let hi = 0, lo = 0, lastH = null, lastL = null, trend = 0, strong = null;
+    for (let i = 0; i < n - 1; i++) { // 마지막(안 끝난) 봉은 판단에서 뺌
+      while (hi < H.length && H[hi].i + k <= i) { lastH = { ...H[hi], used: false, fb: false }; hi++; }
+      while (lo < L.length && L[lo].i + k <= i) { lastL = { ...L[lo], used: false, fb: false }; lo++; }
+      const b = bars[i];
+      if (lastH && !lastH.used && lastH.i < i) {
+        if (b.c > lastH.p) {
+          let m = lastH.i; for (let j = lastH.i; j <= i; j++) if (bars[j].l < bars[m].l) m = j;
+          ev.push({ type: trend < 0 ? "CHoCH" : "BOS", dir: 1, i, from: lastH.i, p: lastH.p });
+          trend = 1; lastH.used = true; strong = { i: m, p: bars[m].l, low: true };
+        } else if (b.h > lastH.p && !lastH.fb) { lastH.fb = true; ev.push({ type: "FB", dir: -1, i, from: lastH.i, p: lastH.p }); }
+      }
+      if (lastL && !lastL.used && lastL.i < i) {
+        if (b.c < lastL.p) {
+          let m = lastL.i; for (let j = lastL.i; j <= i; j++) if (bars[j].h > bars[m].h) m = j;
+          ev.push({ type: trend > 0 ? "CHoCH" : "BOS", dir: -1, i, from: lastL.i, p: lastL.p });
+          trend = -1; lastL.used = true; strong = { i: m, p: bars[m].h, low: false };
+        } else if (b.l < lastL.p && !lastL.fb) { lastL.fb = true; ev.push({ type: "FB", dir: 1, i, from: lastL.i, p: lastL.p }); }
+      }
+    }
+    let weak = null;
+    if (strong) {
+      let m = strong.i;
+      for (let j = strong.i; j < n; j++) if (trend > 0 ? bars[j].h > bars[m].h : bars[j].l < bars[m].l) m = j;
+      weak = { i: m, p: trend > 0 ? bars[m].h : bars[m].l, low: trend < 0 };
+    }
+    const mid = strong && weak ? (strong.p + weak.p) / 2 : null;
+    return { trend, ev, H, L, strong, weak, mid, k };
+  }
+  // 유동성 선: 거의 같은 높이의 고점(저점) 2개 → 그 너머에 손절 주문이 몰려 있음. 꼬리로 쓸고 가면 끝
+  function liquidity(bars, k = 3, max = 5) {
+    const n = bars.length, { H, L } = pivots(bars, k), out = [];
+    let rs = 0, c = 0; for (let j = Math.max(0, n - 200); j < n; j++) { rs += bars[j].h - bars[j].l; c++; }
+    const tol = c ? (rs / c) * 0.2 : 0;
+    for (const [arr, dir] of [[H, 1], [L, -1]]) {
+      let got = 0, used = new Set();
+      for (let a = arr.length - 1; a >= 1 && got < max; a--) {
+        if (used.has(a)) continue;
+        const q = arr[a];
+        for (let b = a - 1; b >= Math.max(0, a - 6); b--) {
+          const p = arr[b];
+          if (Math.abs(p.p - q.p) > tol) continue;
+          const lv = dir > 0 ? Math.max(p.p, q.p) : Math.min(p.p, q.p);
+          let ok = true;
+          for (let j = p.i + 1; j < q.i; j++) if (dir > 0 ? bars[j].h > lv : bars[j].l < lv) { ok = false; break; }
+          if (!ok) continue;
+          let end = n - 1, swept = false;
+          for (let j = q.i + 1; j < n; j++) if (dir > 0 ? bars[j].h > lv : bars[j].l < lv) { end = j; swept = true; break; }
+          out.push({ dir, from: p.i, to: q.i, end, p: lv, swept }); got++; used.add(b); break;
+        }
+      }
+    }
+    return out;
+  }
+  return { ichimoku, bollinger, rsi, sma, myPull, structure, liquidity };
 })();

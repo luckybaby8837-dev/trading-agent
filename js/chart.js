@@ -13,6 +13,7 @@ const Chart = (() => {
   let show = Store.pref.get("show", { ichi: true, bb: true, vol: true, rsi: true });
   if (show.band == null) show.band = true;
   if (show.dbl == null) show.dbl = true; // 내 눌림 진입
+  for (const k of ["st", "pd", "ch", "lq"]) if (show[k] == null) show[k] = true; // 시장 구조 · 50% 선 · 초크 · 유동성 선
   // 손절 범위: 현재가 위아래 1% (20배면 자산 20%)
   const BAND = 0.01, LEV = 20;
   let bandLines = [];
@@ -133,6 +134,7 @@ const Chart = (() => {
     const ms = Market.TF[tf].ms, n = bars.length, last = bars[n - 1].t;
     ind = { ichi: Ind.ichimoku(bars), bb: Ind.bollinger(bars), rsi: Ind.rsi(bars), volMa: Ind.sma(bars.map((b) => b.v), 20) };
     ind.dbl = Ind.myPull(bars, ind.bb, ind.rsi);
+    ind.st = Ind.structure(bars, 8); ind.sti = Ind.structure(bars, 3); ind.lq = Ind.liquidity(bars, 3);
     const T = (i) => lt(i < n ? bars[i].t : last + (i - n + 1) * ms);
     const ser = (arr, shift = 0, extra = 0) => {
       const out = [];
@@ -230,6 +232,7 @@ const Chart = (() => {
     if (show.rsi) rsiGuides(P);
     ctx.beginPath(); ctx.rect(0, 0, P.w, P.ph); ctx.clip();
     if (show.dbl) dblPaint(P);
+    structPaint(P);
     for (const d of drawings) paint(d, P, false);
     if (tool && temp.length && hover) paint(preview(), P, true);
     ctx.restore();
@@ -256,6 +259,66 @@ const Chart = (() => {
       if (ys != null) { ctx.strokeStyle = cSL; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(x1, ys); ctx.lineTo(x2, ys); ctx.stroke(); }
       ctx.restore();
     }
+  }
+  // 시장 구조: 50% 선(위 비싼 구간·아래 싼 구간), 스윙 점, BOS·CHoCH·FB, 강·약, 초크 ▲▼, 유동성 선
+  function structPaint(P) {
+    if (!ind.st) return;
+    const ts = chart.timeScale(), xi = (i) => ts.logicalToCoordinate(i), n = bars.length;
+    const up = css("--up"), dn = css("--dn"), mut = css("--mut"), S0 = ind.st;
+    const on = (x) => x != null && x > -40 && x < P.w + 40;
+    const ln = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
+    ctx.save(); ctx.lineWidth = 1; ctx.textAlign = "center";
+    if (show.pd && S0.mid != null) {
+      const hiP = Math.max(S0.strong.p, S0.weak.p), loP = Math.min(S0.strong.p, S0.weak.p);
+      const x1 = Math.max(0, xi(Math.min(S0.strong.i, S0.weak.i)) ?? 0), yH = Y(hiP), yM = Y(S0.mid), yL = Y(loP);
+      if (yH != null && yM != null && yL != null && x1 < P.w) {
+        ctx.globalAlpha = 0.08; ctx.fillStyle = dn; ctx.fillRect(x1, yH, P.w - x1, yM - yH);
+        ctx.fillStyle = up; ctx.fillRect(x1, yM, P.w - x1, yL - yM);
+        ctx.globalAlpha = 0.75; ctx.strokeStyle = mut; ctx.setLineDash([6, 4]); ln(x1, yM, P.w, yM); ctx.setLineDash([]);
+      }
+    }
+    if (show.lq) for (const q of ind.lq) {
+      const xa = xi(q.from), xb = q.swept ? xi(q.end) : P.w, y = Y(q.p);
+      if (xa == null || xb == null || y == null || xb < 0 || xa > P.w) continue;
+      ctx.globalAlpha = q.swept ? 0.3 : 0.85; ctx.strokeStyle = css("--lq"); ctx.lineWidth = 1.5; ctx.setLineDash([1, 3]);
+      ln(xa, y, xb, y); ctx.setLineDash([]); ctx.lineWidth = 1;
+    }
+    if (show.st) {
+      ctx.fillStyle = mut; ctx.globalAlpha = 0.7;
+      for (const p of S0.H.concat(S0.L)) { const x = xi(p.i), y = Y(p.p); if (on(x) && y != null) { ctx.beginPath(); ctx.arc(x, y + (p.h ? -5 : 5), 1.8, 0, 7); ctx.fill(); } }
+      ctx.font = "10px " + css("--mono");
+      for (const e of S0.ev) {
+        const xa = xi(e.from), xb = xi(e.i), y = Y(e.p);
+        if (xa == null || xb == null || y == null || xb < -40 || xa > P.w + 40) continue;
+        const fb = e.type === "FB", col = fb ? mut : e.dir > 0 ? up : dn;
+        ctx.globalAlpha = fb ? 0.75 : 0.9; ctx.strokeStyle = col; ctx.fillStyle = col;
+        ctx.setLineDash(fb ? [2, 3] : []); ln(xa, y, xb, y); ctx.setLineDash([]);
+        const above = fb ? e.dir < 0 : e.dir > 0;
+        // FB는 꼬리가 넘은 봉 위(아래)에, BOS·CHoCH는 선 가운데에
+        if (fb) { const b = bars[e.i], yy = Y(above ? b.h : b.l); if (yy != null) ctx.fillText("FB", xb, yy + (above ? -5 : 13)); }
+        else ctx.fillText(e.type, (xa + xb) / 2, y + (above ? -4 : 11));
+      }
+      ctx.globalAlpha = 1; ctx.font = "bold 11px " + css("--font");
+      for (const [pt, txt] of [[S0.strong, "강"], [S0.weak, "약"]]) {
+        if (!pt) continue; const x = xi(pt.i), y = Y(pt.p); if (!on(x) || y == null) continue;
+        ctx.fillStyle = css("--tx"); ctx.fillText(txt, x, y + (pt.low ? 19 : -11));
+      }
+    }
+    if (show.ch && ind.sti) {
+      const from = S0.strong ? Math.min(S0.strong.i, S0.weak.i) : n;
+      for (const e of ind.sti.ev) {
+        if (e.type !== "CHoCH") continue;
+        const x = xi(e.i), b = bars[e.i]; if (!on(x)) continue;
+        const good = S0.mid != null && e.i >= from && (e.dir > 0 ? b.c <= S0.mid : b.c >= S0.mid);
+        ctx.globalAlpha = e.i < from ? 0.45 : good ? 1 : 0.3; ctx.fillStyle = e.dir > 0 ? up : dn;
+        const y = e.dir > 0 ? Y(b.l) + 9 : Y(b.h) - 9; if (y == null) continue;
+        ctx.beginPath();
+        if (e.dir > 0) { ctx.moveTo(x, y - 4); ctx.lineTo(x - 4, y + 3); ctx.lineTo(x + 4, y + 3); }
+        else { ctx.moveTo(x, y + 4); ctx.lineTo(x - 4, y - 3); ctx.lineTo(x + 4, y - 3); }
+        ctx.closePath(); ctx.fill();
+      }
+    }
+    ctx.restore();
   }
   function rsiAxis(P, W) {
     ctx.fillStyle = css("--chart-bg");

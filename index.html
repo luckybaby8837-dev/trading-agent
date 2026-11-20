@@ -31,6 +31,7 @@
   <!-- 홈 -->
   <section id="vHome" class="view on">
     <div class="card hero" id="hHero"></div>
+    <div class="card" id="hRules" hidden></div>
     <div class="card news" id="hNews" hidden></div>
     <div class="ticks" id="hTick"></div>
     <div class="lk">
@@ -86,6 +87,11 @@
       <div class="row"><div><label for="rkEn">진입가</label><input id="rkEn" type="number" inputmode="decimal" step="any"></div><div><label for="rkSl">손절가</label><input id="rkSl" type="number" inputmode="decimal" step="any"></div></div>
       <div class="row"><div><label for="rkLev">레버리지 (배)</label><input id="rkLev" type="number" inputmode="decimal" step="any" value="10"></div><div><label for="rkRisk">이번 매매 위험 (%)</label><input id="rkRisk" type="number" inputmode="decimal" step="any"></div></div>
       <div id="rkOut"></div></div>
+    <div class="card"><h3>중요 일정 <small class="mut">CPI · 금리 · 고용</small></h3>
+      <p class="mut sm" style="margin-top:0">넣어 두면 발표 앞뒤 1시간에 홈·새 매매에서 경고해요. 시간은 한국 시간이에요.</p>
+      <div id="rkEvList"></div>
+      <div class="row"><div><label for="rkEvD">날짜</label><input id="rkEvD" type="date"></div><div><label for="rkEvT">시간</label><input id="rkEvT" type="time" value="22:30"></div></div>
+      <div class="row"><div><label for="rkEvN">이름</label><input id="rkEvN" type="text" placeholder="예: CPI, FOMC"></div><button class="primary" id="rkEvAdd" style="align-self:flex-end">+ 일정 넣기</button></div></div>
     <div class="card"><h3>시장 위험</h3><div id="ttBody"></div><p class="mut sm" id="ttNote" style="margin-bottom:0"></p>
       <div class="row" style="margin-top:12px"><button class="primary" id="ttCopy">시장 자료 복사</button><button id="ttClaude">Claude 열기</button></div></div>
     <div class="card"><h3>거부 기준</h3>
@@ -102,6 +108,13 @@
     <div class="card"><h3>감정 × 결과 <small class="mut">최근 90일</small></h3><div id="mcFeel"></div></div>
     <div class="card"><h3>최근 30일 패턴</h3><div id="mcPat"></div></div>
     <div class="card"><h3>최근 7일</h3><div id="taWeek"></div></div>
+    <div class="card"><h3>내 매매 규칙 <small class="mut">매매 전에 훑어보는 요약</small></h3>
+      <textarea id="mcRules" rows="4" placeholder="예:&#10;노란 캔들 → 장악 양봉 → 몸통 안 눌림에서만 진입&#10;손절은 차트 1% 안&#10;하루 3번까지"></textarea>
+      <p class="mut sm" style="margin:6px 0 0">홈 맨 위와 새 매매 화면에 보여요.</p>
+      <button class="primary" id="mcRulesSave" style="width:100%;margin-top:8px">규칙 저장</button></div>
+    <div class="card"><h3>매매 시간</h3>
+      <div class="row" style="margin-top:0"><div><label for="mcFrom">시작 (시)</label><input id="mcFrom" type="number" inputmode="numeric" min="0" max="24"></div><div><label for="mcTo">끝 (시)</label><input id="mcTo" type="number" inputmode="numeric" min="0" max="24"></div></div>
+      <p class="mut sm" style="margin:6px 0 0">이 시간 밖에서 진입하면 틸트 점수 +10. 밤을 넘기려면 예: 9 ~ 2.</p></div>
     <div class="card"><h3>복기 자료</h3><p class="mut sm" style="margin-top:0">기간 안의 매매(근거·손절·익절·결과·심리)와 일지를 묶어서 복사해요.</p>
       <div class="seg" id="taRange"></div>
       <div class="row"><button class="primary" id="taCopy">복기 자료 복사</button><button id="taClaude">Claude 열기</button></div></div>

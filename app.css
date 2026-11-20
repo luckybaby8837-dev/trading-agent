@@ -3,7 +3,7 @@
   --ac:#3d63e8;--ac-soft:#e8edfd;--up:#0f9f5a;--dn:#e0424a;--up-soft:#e2f6ec;--dn-soft:#fde9ea;--pu:#8b4fd8;
   --up-a:rgba(15,159,90,.35);--dn-a:rgba(224,66,74,.35);
   --chart-bg:#ffffff;--grid:#f0f1f5;--ichi-t:#d08a1e;--ichi-k:#7a4b12;--cloud-up:rgba(15,159,90,.10);--cloud-dn:rgba(224,66,74,.10);
-  --cloud-up-line:rgba(15,159,90,.45);--cloud-dn-line:rgba(224,66,74,.45);--bb:#8b93a7;--rsi:#8b4fd8;--rsi-hi:#e0424a;--rsi-lo:#2f6bff;--draw:#3d63e8;--band:rgba(217,138,28,.4);--db-watch:#e6b800;--db-long:#2f80ed;--db-short:#9b51e0;
+  --cloud-up-line:rgba(15,159,90,.45);--cloud-dn-line:rgba(224,66,74,.45);--bb:#8b93a7;--rsi:#8b4fd8;--rsi-hi:#e0424a;--rsi-lo:#2f6bff;--draw:#3d63e8;--band:rgba(217,138,28,.4);--db-watch:#e6b800;--db-long:#2f80ed;--db-short:#9b51e0;--lq:#1597ad;
   --shadow:0 1px 2px rgba(20,23,31,.05),0 6px 18px rgba(20,23,31,.05);
   --font:"Pretendard",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
   --mono:"Pretendard",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;
@@ -15,7 +15,7 @@
   --ac:#7c9bff;--ac-soft:#1d2744;--up:#33d17f;--dn:#ff6a70;--up-soft:#12281e;--dn-soft:#33181a;--pu:#b794f6;
   --up-a:rgba(51,209,127,.35);--dn-a:rgba(255,106,112,.35);
   --chart-bg:#11141b;--grid:#1a1e28;--ichi-t:#e0a03a;--ichi-k:#c98a4a;--cloud-up:rgba(51,209,127,.12);--cloud-dn:rgba(255,106,112,.12);
-  --cloud-up-line:rgba(51,209,127,.5);--cloud-dn-line:rgba(255,106,112,.5);--bb:#6f7891;--rsi:#b794f6;--rsi-hi:#ff6a70;--rsi-lo:#5b8cff;--draw:#7c9bff;--band:rgba(240,176,74,.35);--db-watch:#ffd23f;--db-long:#4c9bff;--db-short:#b57bff;
+  --cloud-up-line:rgba(51,209,127,.5);--cloud-dn-line:rgba(255,106,112,.5);--bb:#6f7891;--rsi:#b794f6;--rsi-hi:#ff6a70;--rsi-lo:#5b8cff;--draw:#7c9bff;--band:rgba(240,176,74,.35);--db-watch:#ffd23f;--db-long:#4c9bff;--db-short:#b57bff;--lq:#3cc8dc;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 22px rgba(0,0,0,.35);
   color-scheme:dark;
 }}
@@ -365,3 +365,11 @@ body.mkOpen{overflow:hidden}
 #trCal .tgroup.cal{margin-bottom:10px}
 .nowBtn{position:absolute;right:72px;top:8px;z-index:6;background:var(--ac);color:#fff;border:0;border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;box-shadow:var(--shadow);min-height:0}
 .nowBtn[hidden]{display:none}
+/* 팔콘 방식: 규칙 · 체크리스트 · 계좌 위험 */
+.rulesT{white-space:pre-wrap;font-size:14px;line-height:1.6;margin-bottom:6px}.rulesT b{display:block;font-size:13px;color:var(--mut);margin-bottom:2px}
+.ckl{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.ckl label{display:flex;gap:10px;align-items:center;margin:0;padding:7px 0;color:var(--tx);font-weight:500;font-size:14px;border-bottom:1px solid var(--bd)}
+.ckl label:last-child{border-bottom:0}.ckl input{width:18px;height:18px;min-height:0;flex:none}
+.riskBig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:8px;padding:10px 12px;border-radius:12px;font-size:15px}
+.riskBig b{font-size:22px;font-family:var(--mono)}.riskBig small{color:var(--mut);font-size:12px}
+.riskBig.ok{background:var(--up-soft);color:var(--up)}.riskBig.no{background:var(--dn-soft);color:var(--dn)}

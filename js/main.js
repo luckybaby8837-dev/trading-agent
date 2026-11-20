@@ -15,7 +15,7 @@
   const sgn = (v) => (v > 0 ? "up" : v < 0 ? "dn" : "");
   const pctS = (v) => (v > 0 ? "+" : "") + v.toFixed(2) + "%";
 
-  const BASIS = ["일목균형표", "볼린저밴드", "RSI", "다이버전스", "거래량", "평행채널", "피보나치", "추세선", "캔들패턴", "삼각수렴", "쌍봉", "임펄스파동", "ABC", "지지·저항"];
+  const BASIS = ["일목균형표", "볼린저밴드", "RSI", "다이버전스", "거래량", "평행채널", "피보나치", "추세선", "캔들패턴", "삼각수렴", "쌍봉", "임펄스파동", "ABC", "지지·저항", "내 눌림 진입"];
   const MOODS = ["차분함", "확신", "설렘", "불안", "조급함", "욕심", "두려움", "후회", "복수심", "지루함", "피곤함"];
 
   const st = {
@@ -226,7 +226,7 @@
   Market.sub(Market.COINS.map((c) => `tickers.${c}USDT`));
 
   // 지표 메뉴
-  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"], ["dbl", "내 눌림 진입"]];
+  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"], ["dbl", "내 눌림 진입"], ["st", "시장 구조 (BOS·강·약)"], ["pd", "50% 선 (비싼·싼 구간)"], ["ch", "초크 ▲▼"], ["lq", "유동성 선 (쌍고점·쌍바닥)"]];
   function buildIndMenu() {
     const m = $("indMenu");
     m.innerHTML = IND.map(([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`).join("")
@@ -511,7 +511,13 @@
   $("newTrade").onclick = () => tradeForm();
   function tradeForm(old) {
     const t = old || { venue: "bybit", coin: st.coin, side: "long", tf: st.tf, basis: [], mood: [] };
+    const nn = old ? [] : newsNear(60), rl = rulesText();
     sheet(`<div class="sh"><h2>${old ? "매매 수정" : "새 매매"}</h2><button class="ghost" id="shX">닫기</button></div>
+      ${old ? "" : `<div class="card">
+        ${rl ? `<div class="rulesT"><b>내 매매 규칙</b>${esc(rl)}</div>` : ""}
+        ${nn.map((e) => `<div class="chk warn"><i>!</i><span>${esc(newsText(e))}</span></div>`).join("")}
+        <label>진입 전 체크</label><div class="ckl" id="fChk">${CHECK.map((c, i) => `<label><input type="checkbox" data-i="${i}">${esc(c)}</label>`).join("")}</div>
+      </div>`}
       <div class="card">
         <label>거래소</label><div class="chips" id="fVen"></div>
         <div class="row"><div><label>종목</label><div class="chips" id="fCoin"></div></div><div id="sideW"><label>방향</label><div class="chips side" id="fSide"></div></div></div>
@@ -524,9 +530,12 @@
           <div><label for="fSl">손절가</label><input id="fSl" type="number" inputmode="decimal" step="any" value="${t.sl || ""}"></div>
           <div><label for="fTp">익절가</label><input id="fTp" type="number" inputmode="decimal" step="any" value="${t.tp || ""}"></div>
         </div>
-        <div class="mut sm" id="fRisk" style="margin-top:8px"></div>
+        <div id="fRisk" style="margin-top:8px"></div>
       </div>
       <div class="card">
+        <label>시장 단계 <small class="mut" id="fPhG"></small></label><div class="chips" id="fPh"></div>
+        <p class="mut sm" style="margin:6px 0 0">${PH_TXT}</p>
+        <label>확신</label><div class="chips" id="fConf"></div>
         <label>매매 근거</label><div class="chips" id="fBasis"></div>
         <label for="fWhy">근거 메모</label><textarea id="fWhy" rows="3" placeholder="왜 이 자리에서 들어가는지">${esc(t.why || "")}</textarea>
       </div>
@@ -543,12 +552,25 @@
       $("sideW").style.display = venue === "upbit" ? "none" : "";
       if (venue === "upbit") side = "buy"; else if (side === "buy") side = "long";
       chips($("fSide"), [["롱", "long"], ["숏", "short"]], [side], false, (v) => v);
-      $("fSide").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { side = b.dataset.v; risk(); }));
+      $("fSide").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { side = b.dataset.v; risk(); guess(); }));
     };
+    let getPh = chips($("fPh"), PH, t.phase ? [t.phase] : [], false), phPicked = !!t.phase;
+    $("fPh").addEventListener("click", () => (phPicked = true));
+    const getConf = chips($("fConf"), CONF, t.conf ? [t.conf] : [], false);
+    // 시장 단계 추천: 4시간·1시간 구조를 계산해서 미리 골라 둠 (내가 고르면 그대로)
+    let gq = 0;
+    async function guess() {
+      if (venue === "upbit" || !Market.COINS.includes(coin)) { $("fPhG").textContent = ""; return; }
+      const my = ++gq; $("fPhG").textContent = "· 계산 중";
+      const g = await phaseGuess(coin, side);
+      if (my !== gq || !$("fPh")) return;
+      $("fPhG").textContent = g ? `· 차트 추천 ${g}` : "";
+      if (g && !phPicked) getPh = chips($("fPh"), PH, [g], false);
+    }
     chips($("fVen"), [["바이비트 선물", "bybit"], ["업비트 현물", "upbit"]], [venue], false);
-    $("fVen").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { venue = b.dataset.v; sideBox(); risk(); }));
+    $("fVen").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { venue = b.dataset.v; sideBox(); risk(); guess(); }));
     chips($("fCoin"), Market.COINS, [coin], false);
-    $("fCoin").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (coin = b.dataset.v)));
+    $("fCoin").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { coin = b.dataset.v; guess(); }));
     chips($("fTf"), Object.entries(Market.TF).map(([k, v]) => [v.name, k]), [tf], false);
     $("fTf").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => (tf = b.dataset.v)));
     sideBox();
@@ -560,17 +582,40 @@
       const s = side === "short" ? -1 : 1, out = [];
       if (en && sl) out.push(`손절까지 ${((sl / en - 1) * 100).toFixed(2)}%` + (q ? ` (${money(s * (sl - en) * q, cur)})` : ""));
       if (en && tp) out.push(`익절까지 ${((tp / en - 1) * 100).toFixed(2)}%` + (q ? ` (${money(s * (tp - en) * q, cur)})` : ""));
-      if (en && sl && tp && (tp - en) * s > 0 && (en - sl) * s > 0) out.push(`손익비 1 : ${((tp - en) / (en - sl)).toFixed(2)}`);
-      $("fRisk").textContent = out.join(" · ");
+      let rr = "";
+      if (en && sl && tp && (tp - en) * s > 0 && (en - sl) * s > 0) {
+        const R = (tp - en) / (en - sl);
+        rr = R < 1 ? `<div class="chk warn"><i>!</i><span>손익비 1 : ${R.toFixed(2)} · 1:1보다 나빠요 (승률 ${Math.round(100 / (1 + R))}% 넘어야 이득)</span></div>`
+          : `<div class="mut sm">손익비 <b>1 : ${R.toFixed(2)}</b> → 승률 <b>${Math.round(100 / (1 + R))}%</b> 넘으면 이득</div>`;
+      }
+      // 계좌 대비 위험 (선물): 손절되면 계좌의 몇 %를 잃는지
+      let big = "";
+      const eq = venue === "upbit" ? null : futEq(), c = riskCfg();
+      if (venue !== "upbit" && en && sl && (en - sl) * s > 0) {
+        if (eq && q) { const rp = Math.abs(en - sl) * q / eq * 100; big = `<div class="riskBig ${rp > c.per + 1e-9 ? "no" : "ok"}">손절되면 계좌 <b>−${rp.toFixed(1)}%</b><small>기준 ${c.per}% · ${money(Math.abs(en - sl) * q, "USD")}</small></div>`; }
+        else if (!eq) big = `<div class="mut sm">바이비트 자산을 알면 계좌 대비 위험 %를 보여 줘요 (설정 → 자산)</div>`;
+        if (eq) big += `<button type="button" class="sm" id="fFit" style="margin-top:6px">계좌 ${c.per}%만 잃는 수량 넣기</button>`;
+      }
+      $("fRisk").innerHTML = `<div class="mut sm">${out.join(" · ")}</div>${rr}${big}`;
+      if ($("fFit")) $("fFit").onclick = () => { const d = Math.abs(en - sl); if (!d) return; $("fQty").value = +(eq * c.per / 100 / d).toFixed(coin === "BTC" ? 3 : 2); risk(); };
     }
-    ["fEn", "fQty", "fSl", "fTp"].forEach((i) => $(i).addEventListener("input", risk)); risk();
+    ["fEn", "fQty", "fSl", "fTp"].forEach((i) => $(i).addEventListener("input", risk)); risk(); guess();
+    const chkDone = () => (old ? null : [...$("fChk").querySelectorAll("input")].filter((x) => x.checked).map((x) => CHECK[+x.dataset.i]));
+    if (!old) $("fChk").addEventListener("change", () => { const b = $("fSave"); b.dataset.s = ""; b.textContent = "기록 저장"; });
     $("fSave").onclick = async () => {
       const en = +$("fEn").value;
       if (!en) { $("fErr").textContent = "진입가를 넣어 주세요."; return; }
+      const done = chkDone();
+      if (done && done.length < CHECK.length && $("fSave").dataset.s !== "1") { $("fSave").dataset.s = "1"; $("fSave").textContent = "체크 생략하고 저장 (한 번 더 누르기)"; $("fErr").textContent = `진입 전 체크 ${CHECK.length - done.length}개가 남았어요.`; return; }
       const n = Object.assign(old || { id: Store.uid("t"), date: today(), time: nowHM(), status: "open" }, {
         venue, coin, side: venue === "upbit" ? "buy" : side, tf, en, qty: +$("fQty").value || 0, sl: +$("fSl").value || 0, tp: +$("fTp").value || 0,
         basis: getBasis(), why: $("fWhy").value.trim(), mood: getMood(), moodText: $("fMoodT").value.trim(),
+        phase: getPh()[0] || "", conf: getConf()[0] || "",
       });
+      if (done) {
+        n.chk = { done: done.length, skip: done.length < CHECK.length };
+        if (n.chk.skip) await Store.put("journal", { id: "chk_" + n.id, kind: "memo", trade: n.id, date: today(), time: nowHM(), mood: [], text: `체크 생략 · ${n.coin} ${sideName[n.side]} 진입 (빠진 것: ${CHECK.filter((c) => !done.includes(c)).join(", ")})` });
+      }
       const shot = $("fSnap").checked ? await captureEntry(n) : null;
       await Store.put("trades", n); await loadData(); closeSheet(); renderTrades(); renderHome();
       toast(shot ? `매매 기록 · ${Market.TF[tf].name} 차트를 일지에 넣었어요` : "매매를 기록했어요");
@@ -586,6 +631,8 @@
         <span>시간봉</span><b>${esc(Market.TF[t.tf] ? Market.TF[t.tf].name : t.tf || "—")}</b>
         <span>진입가 · 수량</span><b>${Chart.fmtP(t.en)} · ${t.qty || "—"}</b>
         <span>손절 · 익절</span><b>${t.sl ? Chart.fmtP(t.sl) : "—"} · ${t.tp ? Chart.fmtP(t.tp) : "—"}</b>
+        ${t.phase || t.conf ? `<span>시장 단계 · 확신</span><b>${esc(t.phase || "—")} · ${esc(t.conf || "—")}</b>` : ""}
+        ${t.chk ? `<span>진입 전 체크</span><b class="${t.chk.skip ? "dn" : ""}">${t.chk.skip ? `생략 (${t.chk.done}/${CHECK.length})` : "다 함"}</b>` : ""}
         ${t.status === "open" ? `<span>현재가</span><b>${lp ? Chart.fmtP(lp) : "—"}</b><span>평가 손익</span><b class="${sgn(pnl || 0)}">${pnl == null ? "—" : money(pnl, cur)}</b>`
         : `<span>청산가</span><b>${t.exit ? Chart.fmtP(t.exit) : "—"} (${esc(t.closeDate || "")})</b><span>실현 손익</span><b class="${sgn(pnl || 0)}">${pnl == null ? "—" : money(pnl, cur)}</b><span>결과</span><b>${esc(t.hit || "—")}</b>`}
       </div></div>
@@ -983,8 +1030,9 @@
   }
   function renderHome() {
     $("topDate").textContent = new Date().toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
-    renderHero(); renderNews(); renderTicks(); renderOpen();
+    renderHero(); renderRules(); renderNews(); renderTicks(); renderOpen();
   }
+  function renderRules() { const r = rulesText(), b = $("hRules"); b.hidden = !r; b.innerHTML = r ? `<div class="rulesT"><b>내 매매 규칙</b>${esc(r)}</div>` : ""; }
   let hT = 0;
   function homeSoon() { if (hT || !$("vHome").classList.contains("on") || document.hidden) return; hT = setTimeout(() => { hT = 0; renderHero(); renderTicks(); }, 1000); }
   function renderSet() {
@@ -1145,6 +1193,36 @@
 
   // ---------- 심리 코치 (경고만, 막지 않음) ----------
   const MIND = { cool: 30, streak: 2, perDay: 4 };
+  // ---------- 팔콘 방식 도구 ----------
+  const PH = ["PP", "PC", "CP", "CC"];
+  const PH_TXT = "앞 글자 = 4시간 큰 구조, 뒤 글자 = 1시간 작은 구조 · P는 내 방향과 같음, C는 반대";
+  const CONF = ["높음", "보통", "불확실"];
+  const CHECK = ["중요 뉴스 일정 확인", "4시간 큰 방향 확인", "롱은 싼 구간 · 숏은 비싼 구간", "손절가 · 목표가 정함", "손익비 괜찮음 (1:1 이상)"];
+  async function phaseGuess(coin, side) {
+    try {
+      const [b4, b1] = await Promise.all([Market.klines(coin, "4h", 500), Market.klines(coin, "1h", 500)]);
+      const big = Ind.structure(b4, 8).trend, small = Ind.structure(b1, 8).trend, s = side === "short" ? -1 : 1;
+      if (!big || !small) return null;
+      return (big === s ? "P" : "C") + (small === s ? "P" : "C");
+    } catch { return null; }
+  }
+  // 중요 일정 (CPI·금리 등): 앞뒤 1시간이면 경고
+  const evList = () => (Store.pref.get("events", []) || []).filter((e) => e && e.d);
+  const evTs = (e) => new Date(e.d + "T" + (e.t || "00:00") + ":00").getTime();
+  const newsNear = (win = 60) => { const now = Date.now(); return evList().filter((e) => Math.abs(evTs(e) - now) <= win * 60e3); };
+  const newsText = (e) => { const m = Math.round((evTs(e) - Date.now()) / 60e3); return `${e.name || "중요 일정"} ${m > 0 ? m + "분 뒤" : m < 0 ? -m + "분 전" : "지금"} 발표 · 앞뒤 1시간은 진입 주의`; };
+  // 매매 시간: 정해 둔 시간 밖 진입은 틸트 점수에 더함
+  const hoursCfg = () => Object.assign({ from: 6, to: 24 }, Store.pref.get("hours", {}));
+  const inHours = (h) => { const c = hoursCfg(); return c.from <= c.to ? h >= c.from && h < c.to : h >= c.from || h < c.to; };
+  const rulesText = () => String(Store.pref.get("rules", "") || "").trim();
+  // 내 승률이면 연속 손실 몇 번까지가 보통인지 (N번 매매 중 가장 긴 연속 손실 ≈ log(N·승률) ÷ log(1 ÷ 패율))
+  function streakNormal() {
+    const from = daysAgo(89), es = entries(from).filter((e) => e.closed && e.pl != null && e.cd >= from);
+    if (es.length < 10) return null;
+    const p = es.filter((e) => e.pl > 0).length / es.length, q = 1 - p, N = Math.max(es.length, 30);
+    if (p <= 0) return null;
+    return { p, N, n: es.length, max: q <= 0 ? 0 : Math.max(1, Math.round(Math.log(N * p) / Math.log(1 / q))) };
+  }
   const tsOf = (d, tm) => (d ? new Date(d + "T" + (tm || "00:00").slice(0, 5) + ":00").getTime() : null);
   const entryTs = (t) => (t.date && t.time ? tsOf(t.date, t.time) : null);
   // 청산 시각: 바이비트 기록의 closeTime, 없으면 같은 날 기록의 시각(대략)
@@ -1188,6 +1266,8 @@
     const last = lossCloses().sort((a, b) => b.ts - a.ts)[0];
     if (last && now >= last.ts && now - last.ts < MIND.cool * 60e3) out.push({ lv: "warn", text: `손절 ${Math.max(1, Math.round((now - last.ts) / 60e3))}분 전 · ${MIND.cool}분은 쉬어 가요 (복수 매매 주의)` });
     const s = lossStreak();
+    const sn = s.n >= 2 ? streakNormal() : null;
+    if (sn) out.push(s.n <= sn.max ? { lv: "info", text: `${s.n}연속 손실은 정상 범위 · 승률 ${Math.round(sn.p * 100)}%면 ${sn.N}번 중 ${sn.max}연속은 보통 나와요 (전략 문제 아님)` } : { lv: "warn", text: `${s.n}연속 손실 · 내 승률로 보통 나오는 ${sn.max}연속보다 많아요, 방법·컨디션 점검` });
     if (s.n >= MIND.streak) out.push(s.last === today() ? { lv: "warn", text: `${s.n}연속 손절 · 오늘은 여기까지가 좋아요` } : { lv: "info", text: `최근 ${s.n}연속 손절 · 다음 진입은 한 번 더 확인해요` });
     const tl = tiltScore();
     if (tl.v >= 60) out.unshift({ lv: "warn", text: `틸트 ${tl.v}점 · 감정이 많이 흔들려요, 오늘은 쉬어 가요` });
@@ -1208,7 +1288,8 @@
     if (last && now >= last.ts) { const m = (now - last.ts) / 60e3; if (m < MIND.cool) add(20, `손절한 지 ${Math.max(1, Math.round(m))}분`); else if (m < 120) add(10, `손절한 지 ${Math.round(m)}분`); }
     const td = entries(today()).filter((e) => e.t.date === today());
     if (td.length >= 3) add(Math.min(24, (td.length - 2) * 8), `오늘 진입 ${td.length}번`);
-    if (td.some((e) => e.t.time && +e.t.time.slice(0, 2) < 6)) add(10, "새벽 매매");
+    { const hc = hoursCfg(); if (td.some((e) => e.t.time && !inHours(+e.t.time.slice(0, 2)))) add(10, `정한 시간(${hc.from}~${hc.to}시) 밖 매매`); }
+    { const sn = s.n >= 2 ? streakNormal() : null; if (sn && s.n > sn.max) add(10, `보통(${sn.max}연속)보다 긴 연속 손실`); }
     // 손실 뒤 크기·레버리지를 키웠는지 (가장 최근 진입 vs 그 전 손실 진입)
     const rec = entries(daysAgo(2)).filter((e) => entryTs(e.t)).sort((a, b) => entryTs(b.t) - entryTs(a.t)), cur = rec[0];
     if (cur && now - entryTs(cur.t) < 24 * 36e5) {
@@ -1262,6 +1343,7 @@
       if (!j.ok) out.push({ lv: "warn", text: `${t.coin} ${sideName[t.side]} 거부 · ${j.no[0]}` });
     }
     if (eq) { const dl = -todayFutPnl() / eq * 100; if (dl >= c.day) out.push({ lv: "warn", text: `오늘 손실 −${dl.toFixed(1)}% · 하루 한도 도달, 오늘은 진입 거부` }); }
+    for (const e of newsNear(60)) out.push({ lv: "warn", text: newsText(e) });
     return out;
   }
   function weekStats(n = 7) {
@@ -1339,6 +1421,9 @@
     ["진입 시간대", (e) => (e.t.time ? [SES(+e.t.time.slice(0, 2))] : ["모름"])],
     ["보유 기간", (e) => [holdOf(e)]],
     ["진입 심리", (e) => e.b.mood || []],
+    ["시장 단계", (e) => [e.b.phase || "모름"]],
+    ["확신", (e) => [e.b.conf || "모름"]],
+    ["진입 전 체크", (e) => [e.b.chk ? (e.b.chk.skip ? "체크 생략" : "체크 다 함") : "모름"]],
   ];
   const usdS = (v) => (v > 0 ? "+" : "") + usd(v);
   function renderData() {
@@ -1355,18 +1440,27 @@
       const rows = [...m.entries()].sort((a, b) => b[1].n - a[1].n || b[1].pl - a[1].pl);
       for (const [k, o] of rows) if (o.n >= 5 && k !== "모름") groups.push({ name, k, ...o, rate: o.w / o.n });
       if (!rows.length) return "";
-      return `<div class="card"><h3>${name}</h3><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${Math.round(o.w / o.n * 100)}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td></tr>`).join("")}</table></div>`;
+      if (rows.every(([k]) => k === "모름")) return "";
+      return `<div class="card"><h3>${name}</h3><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th><th>1번 평균</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${Math.round(o.w / o.n * 100)}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td><td class="${sgn(o.pl)}">${usdS(o.pl / o.n)}</td></tr>`).join("")}</table></div>`;
     }).join("");
     const good = groups.filter((g) => g.pl > 0 && g.rate >= 0.5).sort((a, b) => b.pl - a.pl).slice(0, 3);
     const bad = groups.filter((g) => g.pl < 0).sort((a, b) => a.pl - b.pl).slice(0, 3);
     const line = (g, ok) => `<div class="chk ${ok ? "ok" : "warn"}"><i>${ok ? "✓" : "!"}</i><span>${esc(g.name)} <b>${esc(g.k)}</b> · ${g.n}건 승률 ${Math.round(g.rate * 100)}% · <b class="${sgn(g.pl)}">${usdS(g.pl)}</b></span></div>`;
+    // 시간순 누적 손익으로 최대 연속 손실 · 최대 낙폭
+    const ex = { run: 0, dd: 0 };
+    { let r = 0, cum = 0, peak = 0; for (const e of es.slice().sort((a, b) => (a.cd + (a.cts || 0)).localeCompare(b.cd + (b.cts || 0)))) { r = e.pl < 0 ? r + 1 : 0; ex.run = Math.max(ex.run, r); cum += e.pl; peak = Math.max(peak, cum); ex.dd = Math.max(ex.dd, peak - cum); } }
+    const sn = streakNormal();
     const rv = revenge(es);
     let rvLine = "";
     if (rv.length) { const p = rv.reduce((a, x) => a + x.e.pl, 0), w = rv.filter((x) => x.e.pl > 0).length; rvLine = `<div class="chk ${p < 0 ? "warn" : "info"}"><i>${p < 0 ? "!" : "i"}</i><span>손절 ${MIND.cool}분 안에 다시 들어간 매매 ${rv.length}건 · 승률 ${Math.round(w / rv.length * 100)}% · <b class="${sgn(p)}">${usdS(p)}</b></span></div>`; }
     $("dsFind").innerHTML = `<div class="kv"><span>종료한 매매 <small class="mut">(진입 단위)</small></span><b>${es.length}건 · 승률 ${Math.round(wins.length / es.length * 100)}%</b>
         <span>손익 (달러 환산)</span><b class="${sgn(sum)}">${usdS(sum)}</b>
         <span>평균 수익 / 평균 손실</span><b><span class="up">${usdS(aw)}</span> / <span class="dn">${usdS(al)}</span></b>
-        <span>손익비</span><b>${al ? (aw / -al).toFixed(2) : "—"}</b></div>`
+        <span>손익비</span><b>${al ? (aw / -al).toFixed(2) : "—"}</b>
+        <span>기대값 <small class="mut">(1번 매매당)</small></span><b class="${sgn(sum)}">${usdS(sum / es.length)}</b>
+        <span>최대 연속 손실</span><b>${ex.run}번</b>
+        <span>최대 낙폭 <small class="mut">(누적 손익 기준)</small></span><b class="${ex.dd ? "dn" : ""}">${ex.dd ? "−" + usd(ex.dd) : "—"}</b>
+        ${sn ? `<span>보통 나오는 연속 손실 <small class="mut">(승률 ${Math.round(sn.p * 100)}%, ${sn.N}번 중)</small></span><b>${sn.max}번까지</b>` : ""}</div>`
       + (good.length || bad.length || rvLine ? `<div style="margin-top:10px">${good.map((g) => line(g, true)).join("")}${bad.map((g) => line(g, false)).join("")}${rvLine}</div>`
         : `<p class="mut sm" style="margin-bottom:0">같은 조건의 매매가 5건 이상 쌓이면 잘 되는 것 · 안 되는 것을 골라 줘요.</p>`);
     $("dsBody").innerHTML = body;
@@ -1445,6 +1539,8 @@
   }
   function renderMind() {
     renderTilt(); renderMindNow(); renderFeel();
+    $("mcRules").value = rulesText();
+    const hc = hoursCfg(); $("mcFrom").value = hc.from; $("mcTo").value = hc.to;
     const from = daysAgo(29), es = entries(from).filter((e) => e.t.date >= from);
     const done = es.filter((e) => e.closed && e.pl != null);
     const st2 = (arr) => { const n = arr.length, w = arr.filter((e) => e.pl > 0).length, pl = arr.reduce((a, e) => a + e.pl, 0); return n ? `${n}건 · 승률 ${Math.round(w / n * 100)}% · <b class="${sgn(pl)}">${usdS(pl)}</b>` : "없음"; };
@@ -1468,6 +1564,25 @@
       <span>자주 나온 심리</span><b style="font-family:var(--font)">${esc(w.top.join(" · ") || "—")}</b></div>`;
   }
 
+  $("mcRulesSave").onclick = () => { Store.pref.set("rules", $("mcRules").value.trim()); toast("내 매매 규칙을 저장했어요 · 홈과 새 매매에 보여요"); };
+  ["mcFrom", "mcTo"].forEach((id) => $(id).addEventListener("change", () => {
+    const f = +$("mcFrom").value, t = +$("mcTo").value;
+    if (!(f >= 0 && f <= 24 && t >= 0 && t <= 24) || f === t) { toast("0~24 사이로 넣어 주세요"); return; }
+    Store.pref.set("hours", { from: f, to: t }); renderTilt(); toast(`매매 시간을 ${f}~${t}시로 정했어요`);
+  }));
+  // 중요 일정 (리스크 매니저)
+  function renderEvents() {
+    const cut = Date.now() - 864e5, list = evList().filter((e) => evTs(e) >= cut).sort((a, b) => evTs(a) - evTs(b));
+    if (list.length !== evList().length) Store.pref.set("events", list); // 하루 지난 일정은 지움
+    $("rkEvList").innerHTML = list.length ? list.map((e, i) => `<div class="kvrow"><span>${Math.abs(evTs(e) - Date.now()) <= 36e5 ? '<span class="badge warn">지금 주의</span> ' : ""}${esc(e.d.slice(5))} ${esc(e.t || "")} · <b>${esc(e.name || "")}</b></span><button class="sm ghost danger" data-evd="${i}">삭제</button></div>`).join("")
+      : `<div class="empty">넣어 둔 일정이 없어요.</div>`;
+    $("rkEvList").querySelectorAll("[data-evd]").forEach((b) => b.onclick = () => { list.splice(+b.dataset.evd, 1); Store.pref.set("events", list); renderEvents(); });
+  }
+  $("rkEvAdd").onclick = () => {
+    const d = $("rkEvD").value, t = $("rkEvT").value || "21:30", name = $("rkEvN").value.trim() || "중요 일정";
+    if (!d) { toast("날짜를 골라 주세요"); return; }
+    Store.pref.set("events", evList().concat([{ d, t, name }])); $("rkEvN").value = ""; renderEvents(); toast("일정을 넣었어요 · 앞뒤 1시간 진입하면 경고해요");
+  };
   // 리스크 매니저 화면
   const rk = { coin: st.coin, side: "long" };
   seg($("rkCoin"), Market.COINS.map((c) => [c, c]), rk.coin, (v) => { rk.coin = v; const p = price(v); if (p) $("rkEn").value = +p.toFixed(v === "BTC" ? 1 : 2); rkCalc(); });
@@ -1518,7 +1633,7 @@
     const c = riskCfg();
     $("rkCPer").value = c.per; $("rkCDay").value = c.day; $("rkCLev").value = c.lev;
     if (!$("rkEn").value) { const p = price(rk.coin); if (p) $("rkEn").value = +p.toFixed(rk.coin === "BTC" ? 1 : 2); }
-    renderRiskLive(); rkCalc(); renderTTrend();
+    renderRiskLive(); rkCalc(); renderTTrend(); renderEvents();
   }
   function auditText(n) {
     const from = daysAgo(n - 1);
