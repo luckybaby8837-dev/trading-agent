@@ -12,7 +12,7 @@ const Chart = (() => {
   let drawings = [], tool = null, temp = [], hover = null, onDrawDone = null, magnet = true;
   let show = Store.pref.get("show", { ichi: true, bb: true, vol: true, rsi: true });
   if (show.band == null) show.band = true;
-  if (show.dbl == null) show.dbl = true; // RSI 쌍바닥
+  if (show.dbl == null) show.dbl = true; // 내 눌림 진입
   // 손절 범위: 현재가 위아래 1% (20배면 자산 20%)
   const BAND = 0.01, LEV = 20;
   let bandLines = [];
@@ -100,7 +100,7 @@ const Chart = (() => {
     if (!bars.length) return;
     const ms = Market.TF[tf].ms, n = bars.length, last = bars[n - 1].t;
     ind = { ichi: Ind.ichimoku(bars), bb: Ind.bollinger(bars), rsi: Ind.rsi(bars), volMa: Ind.sma(bars.map((b) => b.v), 20) };
-    ind.dbl = Ind.rsiDouble(bars, ind.bb, ind.rsi);
+    ind.dbl = Ind.myPull(bars, ind.bb, ind.rsi);
     const T = (i) => lt(i < n ? bars[i].t : last + (i - n + 1) * ms);
     const ser = (arr, shift = 0, extra = 0) => {
       const out = [];
@@ -112,7 +112,7 @@ const Chart = (() => {
     };
     const sh = ind.ichi.shift - 1; // 26번째 봉 위치(현재 봉 포함)로 앞당겨 그림
     {
-      // RSI 쌍바닥: 지켜볼 캔들 노랑, 롱 진입 파랑, 숏 진입 보라
+      // 내 눌림 진입: 노란 캔들, 롱 진입 파랑, 숏 진입 보라
       const cW = css("--db-watch"), cL = css("--db-long"), cS = css("--db-short");
       const ent = new Map(show.dbl ? ind.dbl.entries.map((e) => [e.i, e.dir > 0 ? cL : cS]) : []);
       S.candle.setData(bars.map((b, i) => {
@@ -200,21 +200,24 @@ const Chart = (() => {
     if (show.rsi) rsiAxis(P, W);
   }
   // 가격 눈금이 RSI 칸까지 내려오지 않게 가리고, RSI 눈금을 따로 표시
-  // 쌍바닥 선(두 바닥을 이음) + 손절·목표 점선 (영상 지표처럼)
+  // 진입 구간 상자(노란 음봉 몸통, 장악 양봉 다음 봉부터 진입·무효까지) + 손절 점선
   function dblPaint(P) {
-    const cL = css("--db-long"), cS = css("--db-short"), cSL = css("--dn"), cTP = css("--up");
-    for (const e of ind.dbl.entries) {
-      const x1 = X(bars[e.b1.i].t), x2 = X(bars[e.b2.i].t), xe = X(bars[e.i].t);
-      if (xe == null || xe < -200 || x1 > P.w + 200) continue;
-      const xr = X(bars[e.i].t + 12 * ms());
+    const cL = css("--db-long"), cS = css("--db-short"), cSL = css("--dn");
+    const n = bars.length, half = (chart.timeScale().options().barSpacing || 7) / 2;
+    for (const z of ind.dbl.setups) {
+      const xa = X(bars[z.from] ? bars[z.from].t : bars[n - 1].t), xb0 = X(bars[Math.min(z.to, n - 1)].t);
+      if (xa == null || xb0 == null || xb0 < -50 || xa > P.w + 50) continue;
+      const live = !z.entry && z.to >= n - 1;
+      const x1 = xa - half, x2 = xb0 + half + (live ? half * 6 : 0);
+      const y1 = Y(z.zTop), y2 = Y(z.zBot), ys = Y(z.sl);
+      if (y1 == null || y2 == null) continue;
+      const col = z.dir > 0 ? cL : cS;
       ctx.save();
-      ctx.strokeStyle = e.dir > 0 ? cL : cS; ctx.lineWidth = 1.6; ctx.setLineDash([]);
-      ctx.beginPath(); ctx.moveTo(x1, Y(e.b1.p)); ctx.lineTo(x2, Y(e.b2.p)); ctx.stroke();
-      ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
-      for (const [p, c] of [[e.sl, cSL], [e.tp, cTP]]) {
-        const y = Y(p); if (y == null) continue;
-        ctx.strokeStyle = c; ctx.beginPath(); ctx.moveTo(xe, y); ctx.lineTo(xr, y); ctx.stroke();
-      }
+      ctx.globalAlpha = z.entry || live ? 0.18 : 0.08; ctx.fillStyle = col;
+      ctx.fillRect(x1, Math.min(y1, y2), x2 - x1, Math.max(2, Math.abs(y2 - y1)));
+      ctx.globalAlpha = z.entry || live ? 0.9 : 0.35; ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.setLineDash([]);
+      ctx.strokeRect(x1, Math.min(y1, y2), x2 - x1, Math.max(2, Math.abs(y2 - y1)));
+      if (ys != null) { ctx.strokeStyle = cSL; ctx.setLineDash([4, 3]); ctx.beginPath(); ctx.moveTo(x1, ys); ctx.lineTo(x2, ys); ctx.stroke(); }
       ctx.restore();
     }
   }

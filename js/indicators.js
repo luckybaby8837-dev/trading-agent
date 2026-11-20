@@ -44,52 +44,57 @@ const Ind = (() => {
     for (let i = 0; i < arr.length; i++) { s += arr[i]; if (i >= n) s -= arr[i - n]; out[i] = i >= n - 1 ? s / n : null; }
     return out;
   }
-  // RSI 쌍바닥 (로스 카메론, 영상 규칙 그대로) — 롱 기준, 숏은 위아래를 뒤집음
-  // 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감 (지켜볼 자리)
-  // 1) RSI 30 밑  2) 큰 음봉 또는 음봉 3개 연속이 하단 밴드 밖에서 마감 (첫 바닥)
-  // 3) 상승 장악형(앞 음봉 몸통을 통째로 덮는 양봉) → 다시 눌린 두 번째 바닥은 높든 낮든 밴드 안
-  // 4) 두 번째 바닥에서 나온 상승 장악형 마감에 롱. 손절 = 두 번째 바닥 저가, 목표 = 손절 폭 3배
-  // 마지막(아직 안 끝난) 봉은 판단에서 뺌
-  function rsiDouble(bars, bb, r, o = { lo: 30, hi: 70, rr: 3, wait: 60, big: 1.5 }) {
-    const n = bars.length, watch = new Set(), entries = [];
+  // 내 방식 (하락 중 롱 자리, 숏은 위아래 뒤집음)
+  // 1) 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감한 음봉이 '긴 음봉'(최근 20개 평균 몸통의 1.5배)이거나 음봉 3개 이상 연속 중 하나
+  // 2) 노란 음봉 몸통을 통째로 덮는 양봉이 마감하면 → 그 뒤 진입 자리를 봄
+  // 3) 진입 구간 = 노란 음봉의 몸통(종가~시가). 눌림이 밴드 안에서 그 구간에 닿으면 진입(파랑, 숏은 보라)
+  // 손절 = 노란 캔들(들)의 가장 낮은 저가. 그 아래로 마감하면 무효. 마지막(안 끝난) 봉은 진입 판단에서 뺌
+  function myPull(bars, bb, r, o = { lo: 30, hi: 70, big: 1.5, wait: 60 }) {
+    const n = bars.length, watch = new Set(), setups = [];
     const body = (i) => Math.abs(bars[i].c - bars[i].o);
     const avgBody = (i) => { let s = 0, k = 0; for (let j = Math.max(0, i - 20); j < i; j++) { s += body(j); k++; } return k ? s / k : 0; };
-    const engulf = (i, dir) => {
-      if (i < 1) return false;
-      const a = bars[i - 1], b = bars[i];
-      return dir > 0 ? a.c < a.o && b.c > b.o && b.c >= a.o && b.o <= a.c
-        : a.c > a.o && b.c < b.o && b.c <= a.o && b.o >= a.c;
-    };
     for (const dir of [1, -1]) {
-      const ext = (i) => dir > 0 ? bars[i].l : bars[i].h; // 바닥(저가) / 꼭대기(고가)
-      const worse = (x, y) => dir > 0 ? x < y : x > y;
       const against = (i) => dir > 0 ? bars[i].c < bars[i].o : bars[i].c > bars[i].o; // 롱이면 음봉
       const outside = (i) => bb.lo[i] != null && (dir > 0 ? bars[i].c < bb.lo[i] : bars[i].c > bb.up[i]);
-      const inside = (i) => bb.lo[i] != null && (dir > 0 ? ext(i) >= bb.lo[i] : ext(i) <= bb.up[i]);
       const rsiOk = (i) => r[i] != null && (dir > 0 ? r[i] < o.lo : r[i] > o.hi);
-      const push = (i) => against(i) && (body(i) >= avgBody(i) * o.big || (i >= 2 && against(i - 1) && against(i - 2))); // 큰 음봉 또는 음봉 3개 연속
-      let st = 0, start = 0, b1 = -1, e1 = -1, b2 = -1;
-      for (let i = 0; i < n - 1; i++) {
-        if (rsiOk(i) && outside(i)) watch.add(i);
-        if (rsiOk(i) && outside(i) && push(i)) { if (st !== 1 || b1 < 0) b1 = i; st = 1; start = i; }
-        if (st === 0) { b1 = -1; continue; }
-        if (i - start > o.wait) { st = 0; b1 = -1; continue; }
-        if (st === 1) { // 첫 바닥 → 첫 장악형 기다림
-          if (worse(ext(i), ext(b1))) b1 = i;
-          if (engulf(i, dir)) { st = 2; e1 = i; b2 = -1; }
+      const run = (i) => { let k = 0; while (i - k >= 0 && against(i - k)) k++; return k; }; // 연속 음봉 수
+      const yellow = (i) => against(i) && rsiOk(i) && outside(i) && (body(i) >= avgBody(i) * o.big || run(i) >= 3);
+      const ext = (i) => dir > 0 ? bars[i].l : bars[i].h;
+      const worse = (x, y) => dir > 0 ? x < y : x > y;
+      let cur = null; // { y: 마지막 노란 캔들, ys: [], sl, e: 장악 양봉, start }
+      const close = (end, entry) => { if (cur && cur.e >= 0) setups.push({ dir, ys: cur.ys, e: cur.e, zTop: cur.zTop, zBot: cur.zBot, sl: cur.sl, from: cur.e + 1, to: end, entry }); cur = null; };
+      for (let i = 0; i < n; i++) {
+        const last = i === n - 1;
+        if (!last && yellow(i)) {
+          watch.add(i);
+          if (cur && cur.e >= 0) close(i - 1, null); // 장악 뒤 새 노랑 → 이전 건 끝
+          if (!cur) cur = { ys: [], sl: ext(i), e: -1, start: i };
+          cur.ys.push(i); cur.y = i; cur.start = i;
+          if (worse(ext(i), cur.sl)) cur.sl = ext(i);
           continue;
         }
-        // st 2: 첫 장악형 뒤 다시 눌림(두 번째 바닥) → 장악형
-        if (outside(i)) { st = 1; start = i; b1 = i; continue; } // 다시 밴드 밖이면 그게 새 첫 바닥
-        if (i > e1 && (b2 < 0 || worse(ext(i), ext(b2)))) b2 = i;
-        if (i > e1 + 1 && b2 > e1 && engulf(i, dir) && inside(b2)) {
-          const en = bars[i].c, sl = ext(b2), risk = Math.abs(en - sl);
-          if (risk > 0) entries.push({ i, dir, b1: { i: b1, p: ext(b1) }, b2: { i: b2, p: ext(b2) }, en, sl, tp: en + dir * risk * o.rr });
-          st = 0; b1 = -1;
+        if (!cur) continue;
+        if (worse(ext(i), cur.sl) && cur.e < 0) cur.sl = ext(i); // 장악 전 더 내려간 꼬리도 손절 기준에 포함
+        if (cur.e < 0) { // 노란 음봉 몸통을 덮는 양봉 기다림
+          const y = bars[cur.y], b = bars[i];
+          const eng = dir > 0 ? b.c > b.o && b.c >= y.o && b.o <= y.c : b.c < b.o && b.c <= y.o && b.o >= y.c;
+          if (!last && eng) { cur.e = i; cur.zTop = Math.max(y.o, y.c); cur.zBot = Math.min(y.o, y.c); }
+          else if (i - cur.start > o.wait) cur = null;
+          continue;
         }
+        if (last) { close(i, null); break; } // 아직 진입 전 → 지금 봉까지 구간 그림
+        const b = bars[i], inBand = bb.lo[i] != null && (dir > 0 ? b.c >= bb.lo[i] : b.c <= bb.up[i]);
+        if (dir > 0 ? b.c < cur.sl : b.c > cur.sl) { close(i, null); continue; } // 손절가 밖 마감 → 무효
+        const touch = dir > 0 ? b.l <= cur.zTop : b.h >= cur.zBot;
+        if (touch && inBand) {
+          const p = dir > 0 ? Math.min(cur.zTop, b.o) : Math.max(cur.zBot, b.o);
+          close(i, { i, p });
+          continue;
+        }
+        if (i - cur.e > o.wait) close(i, null);
       }
     }
-    return { watch, entries: entries.sort((a, b) => a.i - b.i) };
+    return { watch, setups: setups.sort((a, b) => a.from - b.from), entries: setups.filter((s) => s.entry).map((s) => ({ i: s.entry.i, dir: s.dir })) };
   }
-  return { ichimoku, bollinger, rsi, sma, rsiDouble };
+  return { ichimoku, bollinger, rsi, sma, myPull };
 })();
