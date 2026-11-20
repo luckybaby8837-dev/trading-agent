@@ -370,7 +370,7 @@
   function toKrw(v, cur) { return cur === "KRW" ? v : st.fx ? v * st.fx.rate : null; }
 
   let trFilter = "all";
-  seg($("trFilter"), [["전체", "all"], ["진행 중", "open"], ["종료", "closed"], ["달력", "cal"]], trFilter, (v) => { trFilter = v; renderTrades(); });
+  seg($("trFilter"), [["전체", "all"], ["진행 중", "open"], ["종료", "closed"]], trFilter, (v) => { trFilter = v; calSel = null; renderTrades(); });
   async function loadData() {
     st.trades = (await Store.all("trades")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.journal = (await Store.all("journal")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
@@ -405,8 +405,8 @@
     return `<div class="tline${dup ? " dup" : ""}" data-id="${t.id}"${dup ? ' title="자동 기록과 겹쳐서 손익 합계에서 뺐어요"' : ""}><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b><span class="tv">${venueName[t.venue]}${dup ? " · 노트 (중복, 합계 제외)" : ""}</span>
       <span class="tp"><b class="${sgn(p || 0)}">${p == null ? "—" : (p > 0 ? "+" : "") + money(p, cur)}</b><small class="${sgn(pct || 0)}">${pct == null ? "" : pctS(pct)}</small></span></div>`;
   }
-  // 달력: 날마다 손익(색), 익절·손절 수, 보유 중인 포지션 띠. 날짜를 누르면 그날 매매가 아래에 보임
-  let calM = today().slice(0, 7), calSel = today();
+  // 달력 (매매 기록 맨 위에 항상): 날마다 손익(색), 익절·손절 수, 보유 중인 포지션 띠. 날짜를 누르면 아래 목록이 그날 매매로 바뀜, 다시 누르면 원래대로
+  let calM = today().slice(0, 7), calSel = null;
   const shortC = (v) => {
     const a = Math.abs(v), s = v > 0 ? "+" : v < 0 ? "-" : "";
     if (cur === "KRW") return s + (a >= 1e8 ? (a / 1e8).toFixed(1) + "억" : a >= 1e4 ? Math.round(a / 1e4) + "만" : Math.round(a));
@@ -435,9 +435,22 @@
       </button>`);
     }
     const wr = mTp + mSl ? Math.round(mTp / (mTp + mSl) * 100) : 0;
-    const sel = calSel.startsWith(calM) ? calSel : null;
+    box.innerHTML = `<div class="tgroup cal">
+      <div class="calh"><button id="calPrev" aria-label="이전 달">‹</button><b>${y}년 ${mo}월</b><button id="calNext" aria-label="다음 달">›</button></div>
+      <div class="cals"><span>손익 <b class="${sgn(mSum)}">${mOk ? sgC(mSum) : "—"}</b></span><span><i class="tp">익절</i> ${mTp}</span><span><i class="sl">손절</i> ${mSl}</span><span>승률 ${wr}%</span></div>
+      <div class="cgrid">${WD.map((w, i) => `<span class="cw${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
+      <div class="clg"><span><i class="hold-k long"></i>롱 보유</span><span><i class="hold-k short"></i>숏 보유</span><span><i class="hold-k spot"></i>현물 보유</span><span>● 진입</span></div>
+    </div>`;
+    const mv = (k) => { const x = new Date(y, mo - 1 + k, 1); calM = x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0"); renderTrades(); };
+    $("calPrev").onclick = () => mv(-1); $("calNext").onclick = () => mv(1);
+    box.querySelectorAll(".cd[data-d]").forEach((b) => b.onclick = () => { calSel = calSel === b.dataset.d ? null : b.dataset.d; renderTrades(); });
+  }
+  // 달력에서 고른 날의 매매 (종료·진입·보유 중)
+  function dayDetail(sel) {
+    const dOf = (t) => t.closeDate || t.date || "", td = today();
+    const heldOn = (d) => st.trades.filter((t) => !shadowed(t) && t.date && t.date <= d && (t.status === "open" ? d <= td : d <= dOf(t)) && !(t.status === "closed" && t.date === dOf(t)));
     let detail = "";
-    if (sel) {
+    {
       const cl = st.trades.filter((t) => t.status === "closed" && dOf(t) === sel);
       const ins = st.trades.filter((t) => t.date === sel && !cl.includes(t));
       const held = heldOn(sel).filter((t) => !cl.includes(t) && !ins.includes(t));
@@ -447,20 +460,17 @@
         ${grp("종료 (익절·손절)", cl)}${grp("진입", ins)}${grp("보유 중", held)}
         ${!cl.length && !ins.length && !held.length ? `<div class="empty" style="padding:14px">이날은 매매가 없어요.</div>` : ""}</div>`;
     }
-    box.innerHTML = `<div class="tgroup cal">
-      <div class="calh"><button id="calPrev" aria-label="이전 달">‹</button><b>${y}년 ${mo}월</b><button id="calNext" aria-label="다음 달">›</button></div>
-      <div class="cals"><span>손익 <b class="${sgn(mSum)}">${mOk ? sgC(mSum) : "—"}</b></span><span><i class="tp">익절</i> ${mTp}</span><span><i class="sl">손절</i> ${mSl}</span><span>승률 ${wr}%</span></div>
-      <div class="cgrid">${WD.map((w, i) => `<span class="cw${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
-      <div class="clg"><span><i class="hold-k long"></i>롱 보유</span><span><i class="hold-k short"></i>숏 보유</span><span><i class="hold-k spot"></i>현물 보유</span><span>● 진입</span></div>
-    </div>${detail}`;
-    const mv = (k) => { const x = new Date(y, mo - 1 + k, 1); calM = x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0"); renderTrades(); };
-    $("calPrev").onclick = () => mv(-1); $("calNext").onclick = () => mv(1);
-    box.querySelectorAll(".cd[data-d]").forEach((b) => b.onclick = () => { calSel = b.dataset.d; renderTrades(); });
-    box.querySelectorAll(".tline").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+    return detail + `<button class="ghost calAll" id="calAll">전체 기록 보기</button>`;
   }
   function renderTrades() {
     const box = $("trList"), out = [];
-    if (trFilter === "cal") return renderCalendar(box);
+    renderCalendar($("trCal"));
+    if (calSel) {
+      box.innerHTML = dayDetail(calSel);
+      box.querySelectorAll(".tline").forEach((el) => el.onclick = () => tradeDetail(el.dataset.id));
+      $("calAll").onclick = () => { calSel = null; renderTrades(); };
+      return;
+    }
     const open = st.trades.filter((t) => t.status === "open");
     const closed = st.trades.filter((t) => t.status === "closed");
     if (trFilter !== "closed" && open.length) out.push(`<div class="tgroup"><div class="tmon static"><b>진행 중</b><span>${open.length}건</span></div>${open.map(tradeLine).join("")}</div>`);
