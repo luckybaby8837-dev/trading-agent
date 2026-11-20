@@ -45,10 +45,11 @@ const Ind = (() => {
     return out;
   }
   // RSI 쌍바닥 (로스 카메론): RSI 30 밑 + 하단 밴드 밖 마감 = 지켜볼 자리(노랑) →
-  // 상승 장악형 → 한 번 더 눌린 두 번째 바닥이 밴드 안 → 다시 상승 장악형 마감에 롱(파랑).
+  // 상승 장악형 → 한 번 더 눌린 두 번째 바닥이 밴드 안 → 그 뒤 첫 양봉 마감에 롱(파랑) (빠른 진입, 사용자 방식).
+  // fast:false면 영상 원래대로 두 번째 상승 장악형 마감에 진입.
   // 손절 = 두 번째 바닥 저가, 목표 = 손절 폭 3배. 숏(보라)은 반대 (RSI 70 위, 상단 밴드).
   // 마지막(아직 안 끝난) 봉은 진입 판단에서 뺌
-  function rsiDouble(bars, bb, r, o = { lo: 30, hi: 70, rr: 3, wait: 40 }) {
+  function rsiDouble(bars, bb, r, o = { lo: 30, hi: 70, rr: 3, wait: 40, fast: true }) {
     const n = bars.length, watch = new Set(), entries = [];
     const engulf = (i, dir) => {
       if (i < 1) return false;
@@ -62,20 +63,23 @@ const Ind = (() => {
       const outside = (i) => bb.lo[i] != null && (dir > 0 ? bars[i].c < bb.lo[i] : bars[i].c > bb.up[i]);
       const inside = (i) => bb.lo[i] != null && (dir > 0 ? ext(i) >= bb.lo[i] : ext(i) <= bb.up[i]);
       const trig = (i) => r[i] != null && (dir > 0 ? r[i] < o.lo : r[i] > o.hi) && outside(i);
-      let st = 0, start = 0, b1 = -1, e1 = -1, b2 = -1;
+      let st = 0, start = 0, b1 = -1, e1 = -1, b2 = -1, pulled = false;
+      const turn = (i) => dir > 0 ? bars[i].c > bars[i].o : bars[i].c < bars[i].o; // 이번 방향 캔들 (롱=양봉)
       for (let i = 0; i < n - 1; i++) {
         if (trig(i)) { watch.add(i); if (st !== 1) { st = 1; start = i; b1 = i; } }
         if (st === 0) continue;
         if (i - start > o.wait) { st = 0; continue; }
         if (st === 1) { // 첫 바닥 다지는 중 → 첫 장악형 기다림
           if (worse(ext(i), ext(b1))) b1 = i;
-          if (engulf(i, dir)) { st = 2; e1 = i; b2 = -1; }
+          if (engulf(i, dir)) { st = 2; e1 = i; b2 = -1; pulled = false; }
           continue;
         }
         // st 2: 첫 장악형 뒤 → 다시 눌림(두 번째 바닥)과 그 뒤 장악형
         if (outside(i)) { st = 1; start = i; b1 = i; continue; } // 다시 밴드 밖이면 처음부터
         if (i > e1 && (b2 < 0 || worse(ext(i), ext(b2)))) b2 = i;
-        if (i > e1 + 1 && engulf(i, dir) && inside(b2) && inside(i)) {
+        const go = o.fast ? pulled && turn(i) : engulf(i, dir);
+        if (i > e1 && !turn(i)) pulled = true; // 반대 캔들 = 다시 눌림
+        if (i > e1 + 1 && go && inside(b2) && inside(i)) {
           const en = bars[i].c, sl = ext(b2), risk = Math.abs(en - sl); // b2는 첫 장악형 뒤 가장 낮은(높은) 봉, 이번 봉 포함
           if (risk > 0) entries.push({ i, dir, b1: { i: b1, p: ext(b1) }, b2: { i: b2, p: ext(b2) }, en, sl, tp: en + dir * risk * o.rr });
           st = 0;
