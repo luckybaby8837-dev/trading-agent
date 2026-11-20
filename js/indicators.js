@@ -45,7 +45,8 @@ const Ind = (() => {
     return out;
   }
   // 내 방식 (하락 중 롱 자리, 숏은 위아래 뒤집음)
-  // 1) 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감한 음봉이 '긴 음봉'(최근 20개 평균 몸통의 1.5배)이거나 음봉 3개 이상 연속 중 하나
+  // 1) 노란 캔들: RSI 30 밑 + 하단 밴드 밖에서 마감하고, ①긴 음봉(최근 20개 평균 몸통의 1.5배) ②음봉 3개 이상 연속 ③역망치형(색 상관없음) 중 하나
+  //    역망치형 = 윗꼬리가 몸통의 2배 이상, 아랫꼬리는 몸통 이하·윗꼬리의 1/3 이하 (숏은 위아래 뒤집은 모양)
   // 2) 노란 음봉 몸통을 통째로 덮는 양봉이 마감하면 → 그 뒤 진입 자리를 봄
   // 3) 진입 구간 = 노란 음봉의 몸통(종가~시가). 눌림이 밴드 안에서 그 구간에 닿으면 진입(파랑, 숏은 보라)
   // 손절 = 노란 캔들(들)의 가장 낮은 저가. 그 아래로 마감하면 무효. 마지막(안 끝난) 봉은 진입 판단에서 뺌
@@ -58,7 +59,12 @@ const Ind = (() => {
       const outside = (i) => bb.lo[i] != null && (dir > 0 ? bars[i].c < bb.lo[i] : bars[i].c > bb.up[i]);
       const rsiOk = (i) => r[i] != null && (dir > 0 ? r[i] < o.lo : r[i] > o.hi);
       const run = (i) => { let k = 0; while (i - k >= 0 && against(i - k)) k++; return k; }; // 연속 음봉 수
-      const yellow = (i) => against(i) && rsiOk(i) && outside(i) && (body(i) >= avgBody(i) * o.big || run(i) >= 3);
+      const invHammer = (i) => { // 롱: 역망치형 / 숏: 뒤집은 모양(긴 아랫꼬리)
+        const b = bars[i], bd = Math.max(body(i), (b.h - b.l) * 0.02), top = Math.max(b.o, b.c), bot = Math.min(b.o, b.c);
+        const far = dir > 0 ? b.h - top : bot - b.l, near = dir > 0 ? bot - b.l : b.h - top;
+        return b.h > b.l && far >= bd * 2 && near <= bd && near <= far / 3;
+      };
+      const yellow = (i) => rsiOk(i) && outside(i) && ((against(i) && (body(i) >= avgBody(i) * o.big || run(i) >= 3)) || invHammer(i));
       const ext = (i) => dir > 0 ? bars[i].l : bars[i].h;
       const worse = (x, y) => dir > 0 ? x < y : x > y;
       let cur = null; // { y: 마지막 노란 캔들, ys: [], sl, e: 장악 양봉, start }
@@ -77,7 +83,8 @@ const Ind = (() => {
         if (worse(ext(i), cur.sl) && cur.e < 0) cur.sl = ext(i); // 장악 전 더 내려간 꼬리도 손절 기준에 포함
         if (cur.e < 0) { // 노란 음봉 몸통을 덮는 양봉 기다림
           const y = bars[cur.y], b = bars[i];
-          const eng = dir > 0 ? b.c > b.o && b.c >= y.o && b.o <= y.c : b.c < b.o && b.c <= y.o && b.o >= y.c;
+          const yt = Math.max(y.o, y.c), yb = Math.min(y.o, y.c); // 노란 캔들 몸통을 통째로 덮음
+          const eng = dir > 0 ? b.c > b.o && b.c >= yt && b.o <= yb : b.c < b.o && b.c <= yb && b.o >= yt;
           if (!last && eng) { cur.e = i; cur.zTop = Math.max(y.o, y.c); cur.zBot = Math.min(y.o, y.c); }
           else if (i - cur.start > o.wait) cur = null;
           continue;
