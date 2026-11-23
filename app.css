@@ -373,3 +373,15 @@ body.mkOpen{overflow:hidden}
 .riskBig{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:8px;padding:10px 12px;border-radius:12px;font-size:15px}
 .riskBig b{font-size:22px;font-family:var(--mono)}.riskBig small{color:var(--mut);font-size:12px}
 .riskBig.ok{background:var(--up-soft);color:var(--up)}.riskBig.no{background:var(--dn-soft);color:var(--dn)}
+
+/* 2026-11 간소화: 탭 3개(홈·차트·기록) */
+.recBar{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0 4px}
+.recBar .seg button{padding:7px 18px}
+#hRules,#shotBtn{display:none!important}
+.menu .mhd{font-size:11.5px;font-weight:700;color:var(--mut);padding:10px 10px 4px;border-top:1px solid var(--bd);margin-top:4px}
+.toolList{display:flex;flex-direction:column}
+.toolList button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-bottom:1px solid var(--bd);border-radius:0;padding:12px 2px;min-height:0;text-align:left;font-weight:500}
+.toolList button:last-child{border-bottom:0}
+.toolList b{flex:none;font-size:14.5px}
+.toolList span{flex:1;min-width:0;font-size:12.5px;color:var(--mut);text-align:right}
+.toolList i{font-style:normal;color:var(--mut)}

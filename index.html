@@ -48,6 +48,7 @@
 
   <!-- 매매 -->
   <section id="vTrade" class="view">
+    <div class="recBar"><div class="seg recSeg"><button data-r="vTrade">매매</button><button data-r="vJournal">일지</button></div><button class="sm reviewBtn">복기 자료</button></div>
     <div class="head"><h2>매매 기록</h2><button class="primary sm" id="newTrade">+ 새 매매</button></div>
     <div id="trCal"></div>
     <div class="seg filter" id="trFilter"></div>
@@ -77,7 +78,7 @@
 
   <!-- 리스크 매니저 -->
   <section id="vTRisk" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛡 리스크 매니저</h2></div>
+    <div class="head tpage"><button class="back" data-back="vSet" aria-label="설정으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛡 리스크 매니저</h2></div>
     <p class="mut sm role">선물 위험을 숫자로 심사해요 · 기준을 넘으면 <b>진입 거부</b></p>
     <div class="card"><h3>오늘 손실 한도</h3><div id="rkToday"></div></div>
     <div class="card"><h3>진행 중 포지션 심사</h3><div id="rkPos"></div></div>
@@ -101,7 +102,7 @@
 
   <!-- 심리 코치 -->
   <section id="vTMind" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🧠 심리 코치</h2></div>
+    <div class="head tpage"><button class="back" data-back="vSet" aria-label="설정으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🧠 심리 코치</h2></div>
     <p class="mut sm role">감정 매매 신호를 알려줘요 · <b>경고만</b> 하고 판단은 내가 해요</p>
     <div class="card"><h3>틸트 점수 <small class="mut">감정이 흔들린 정도</small></h3><div id="mcTilt"></div></div>
     <div class="card"><h3>지금</h3><div id="mcNow"></div></div>
@@ -122,7 +123,7 @@
 
   <!-- 상담사 -->
   <section id="vTTalk" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛋 상담사</h2></div>
+    <div class="head tpage"><button class="back" data-back="vSet" aria-label="설정으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>🛋 상담사</h2></div>
     <p class="mut sm role">내 이야기를 들어줘요 · 매매 기록과 심리를 알고 Claude 앱에서 대화해요</p>
     <div class="talk" id="tkLog"></div>
     <div class="card">
@@ -136,7 +137,7 @@
 
   <!-- 데이터 분석가 -->
   <section id="vTData" class="view">
-    <div class="head tpage"><button class="back" data-back="vTeam" aria-label="팀 목록으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>📊 데이터 분석가</h2></div>
+    <div class="head tpage"><button class="back" data-back="vSet" aria-label="설정으로"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button><h2>📊 데이터 분석가</h2></div>
     <p class="mut sm role">내 매매 기록에서 사실만 뽑아요 · 5건 미만은 참고만</p>
     <div class="seg" id="dsRange" style="margin-bottom:10px"></div>
     <div class="card"><h3>발견</h3><div id="dsFind"></div></div>
@@ -170,7 +171,8 @@
 
   <!-- 일지 -->
   <section id="vJournal" class="view">
-    <div class="head" style="margin-top:6px"><h2>오늘의 일지</h2><input type="date" id="jDate"></div>
+    <div class="recBar"><div class="seg recSeg"><button data-r="vTrade">매매</button><button data-r="vJournal">일지</button></div><button class="sm reviewBtn">복기 자료</button></div>
+    <div class="head"><h2>오늘의 일지</h2><input type="date" id="jDate"></div>
     <div class="card" id="diaryCard">
       <label>심리 상태</label>
       <div class="chips" id="moodChips"></div>
@@ -193,6 +195,16 @@
   <!-- 설정 (오른쪽 위 ⚙) -->
   <section id="vSet" class="view">
     <div class="head" style="margin-top:6px"><h2>설정</h2><button class="sm" id="setX">닫기</button></div>
+    <div class="card">
+      <h3>돈 관리 · 도구</h3>
+      <div class="toolList">
+        <button data-open="vAcct"><b>💰 돈 관리</b><span>손익 · 출금·입금 · 김프·환율</span><i>›</i></button>
+        <button data-open="vTRisk"><b>🛡 리스크 매니저</b><span>손실 한도 · 진입 전 계산기 · 중요 일정</span><i>›</i></button>
+        <button data-open="vTMind"><b>🧠 심리 코치</b><span>틸트 점수 · 감정 패턴 · 내 규칙</span><i>›</i></button>
+        <button data-open="vTData"><b>📊 데이터 분석가</b><span>내 매매 성적</span><i>›</i></button>
+        <button data-open="vTTalk"><b>🛋 상담사</b><span>Claude와 마음 이야기</span><i>›</i></button>
+      </div>
+    </div>
     <div class="card">
       <h3>자산</h3>
       <p class="mut sm" style="margin-top:0">홈 첫 카드의 <b>현재 자산</b>에 쓰여요. 바이비트를 연결하면 바이비트 잔고는 자동이에요.</p>
@@ -240,10 +252,8 @@
 
 <nav class="tabs">
   <button data-v="vHome" class="on"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-6h4v6"/></svg><span>홈</span></button>
-  <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1"/><circle cx="4" cy="12" r="1"/><circle cx="4" cy="18" r="1"/></svg><span>매매</span></button>
   <button data-v="vChart"><svg viewBox="0 0 24 24"><path d="M7 4v16M17 4v16"/><rect x="4.5" y="8" width="5" height="7" rx="1"/><rect x="14.5" y="6" width="5" height="9" rx="1"/></svg><span>차트</span></button>
-  <button data-v="vTeam"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><path d="M3.5 19c.6-3 2.8-5 5.5-5s4.9 2 5.5 5"/><circle cx="17" cy="9" r="2.4"/><path d="M15.5 14.2c2.4.1 4.3 1.9 4.9 4.8"/></svg><span>팀</span></button>
-  <button data-v="vJournal"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg><span>일지</span></button>
+  <button data-v="vTrade"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h5"/></svg><span>기록</span></button>
 </nav>
 
 <!-- 시트(팝업) -->

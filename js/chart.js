@@ -14,6 +14,8 @@ const Chart = (() => {
   if (show.band == null) show.band = true;
   if (show.dbl == null) show.dbl = true; // 내 눌림 진입
   for (const k of ["st", "pd", "ch", "lq"]) if (show[k] == null) show[k] = true; // 시장 구조 · 50% 선 · 초크 · 유동성 선
+  // 2026-11 앱 간소화: 자동 표시는 기본으로 끔 (지표 메뉴에서 다시 켤 수 있음) — 한 번만 적용
+  if (!Store.pref.get("slim1", false)) { for (const k of ["dbl", "st", "pd", "ch", "lq"]) show[k] = false; Store.pref.set("show", show); Store.pref.set("slim1", true); }
   // 손절 범위: 현재가 위아래 1% (20배면 자산 20%)
   const BAND = 0.01, LEV = 20;
   let bandLines = [];

@@ -116,8 +116,10 @@
       if (isSub(v)) pushLayer({ type: "view", back: cur || "vHome" });
       else layers = layers.filter((l) => l.type !== "view");
     }
-    const tabV = /^vT[A-Z]/.test(v) ? "vTeam" : v === "vAcct" ? "vHome" : v;
+    const tabV = v === "vJournal" ? "vTrade" : v; // 일지는 '기록' 탭 안
     document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x.dataset.v === tabV));
+    document.querySelectorAll(".recSeg button").forEach((x) => x.classList.toggle("on", x.dataset.r === v));
+    if (v === "vTrade" || v === "vJournal") Store.pref.set("recSub", v);
     document.querySelectorAll(".view").forEach((x) => x.classList.toggle("on", x.id === v));
     document.body.dataset.v = v;
     scrollTo(0, 0);
@@ -139,11 +141,30 @@
     if (l && l.type === "view") { layers.pop(); ignorePop++; history.back(); showView(l.back, true); } else showView(fallback);
   }
   $("setX").onclick = () => goBack(lastTab);
+  // 기록 화면 열기: 매매 또는 일지 (마지막에 보던 쪽)
+  function openRec(v) {
+    v = v || Store.pref.get("recSub", "vTrade");
+    lastTab = v; showView(v);
+    if (v === "vTrade") renderTrades(); else renderJournal();
+  }
   document.querySelectorAll(".tabs button").forEach((b) => b.onclick = () => {
+    if (b.dataset.v === "vTrade") return openRec();
     lastTab = b.dataset.v; showView(b.dataset.v);
-    if (b.dataset.v === "vTrade") renderTrades();
-    if (b.dataset.v === "vJournal") renderJournal();
-    if (b.dataset.v === "vAcct") renderAcct();
+  });
+  document.querySelectorAll(".recSeg button").forEach((b) => b.onclick = () => openRec(b.dataset.r));
+  // 설정 안의 돈 관리 · 도구
+  document.querySelectorAll("[data-open]").forEach((b) => b.onclick = () => showView(b.dataset.open));
+  // 복기 자료: 기간 고르고 복사 → Claude에 붙여넣기
+  document.querySelectorAll(".reviewBtn").forEach((b) => b.onclick = () => {
+    let days = 7;
+    sheet(`<div class="sh"><h2>복기 자료</h2><button class="ghost" id="shX">닫기</button></div>
+      <p class="mut sm" style="margin-top:0">기간 안의 매매(근거·손절·익절·결과·심리)와 일지를 묶어서 복사해요. Claude 대화창에 붙여 넣으면 복기해 줘요.</p>
+      <div class="seg" id="rvRange"></div>
+      <div class="steps"><button id="rvCopy"><i>1</i>복기 자료 복사</button><button class="primary" id="rvClaude"><i>2</i>Claude 열기</button></div>`);
+    $("shX").onclick = closeSheet;
+    seg($("rvRange"), [["7일", 7], ["30일", 30], ["90일", 90]], days, (v) => (days = v));
+    $("rvCopy").onclick = () => copyText(auditText(days), `최근 ${days}일 복기 자료를 복사했어요`);
+    $("rvClaude").onclick = () => window.open("https://claude.ai/new", "_blank", "noopener");
   });
 
   // ---------- 상단 시세 ----------
@@ -229,7 +250,8 @@
   const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"], ["dbl", "내 눌림 진입"], ["st", "시장 구조 (BOS·강·약)"], ["pd", "50% 선 (비싼·싼 구간)"], ["ch", "초크 ▲▼"], ["lq", "유동성 선 (쌍고점·쌍바닥)"]];
   function buildIndMenu() {
     const m = $("indMenu");
-    m.innerHTML = IND.map(([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`).join("")
+    const row = ([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`;
+    m.innerHTML = IND.slice(0, 5).map(row).join("") + `<div class="mhd">자동 표시</div>` + IND.slice(5).map(row).join("")
       + `<label><input type="checkbox" data-k="log" ${Chart.log ? "checked" : ""}>로그 차트</label>`
       + `<label><input type="checkbox" data-k="mag" ${Chart.magnet ? "checked" : ""}>선 그릴 때 캔들에 붙이기</label>`;
     m.querySelectorAll("input").forEach((i) => i.onchange = () => {
@@ -1703,8 +1725,9 @@
     for (const c of Market.COINS) { const k = kimp(c); if (k != null && (k >= 3 || k <= -1)) items.push({ team: "돈 관리", v: "vAcct", text: `${c} 김프 ${pctS(k)}` }); }
     const box = $("hNews");
     box.hidden = !items.length;
-    box.innerHTML = items.map((x) => `<button class="nrow" data-v="${x.v}"><b>${x.team}</b><span>${esc(x.text)}</span><i>›</i></button>`).join("");
-    box.querySelectorAll(".nrow").forEach((b) => b.onclick = () => { if (b.dataset.v !== "vAcct") lastTab = "vTeam"; showView(b.dataset.v); });
+    const x = items[0]; // 가장 중요한 것 한 줄만
+    box.innerHTML = x ? `<button class="nrow" data-v="${x.v}"><b>⚠ ${x.team}</b><span>${esc(x.text)}${items.length > 1 ? ` <small class="mut">외 ${items.length - 1}건</small>` : ""}</span><i>›</i></button>` : "";
+    box.querySelectorAll(".nrow").forEach((b) => b.onclick = () => { lastTab = "vHome"; showView(b.dataset.v); });
   }
 
   // ---------- 노트 가져오기 · 백업 ----------
