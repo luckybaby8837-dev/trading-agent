@@ -133,6 +133,7 @@
     if (v === "vTTalk") renderTalk();
     if (v === "vAcct") renderAcct();
     if (v !== "vChart") stopTool();
+    if (v !== "vJournal") formHome(); // 일지 쓰는 칸은 하나: 홈에 두고, 일지 화면에서 쓸 때만 옮겨 옴
   }
   $("setBtn").onclick = () => showView("vSet");
   // 화면 안의 닫기·‹ 버튼도 뒤로가기와 똑같이
@@ -779,6 +780,7 @@
   }
 
   // ---------- 일지 ----------
+  const isDiary = (j) => j.kind === "diary" || (j.kind === "memo" && !j.trade); // 예전 홈 메모도 일지로 봄
   $("jDate").value = today();
   let getMood = chips($("moodChips"), MOODS, [], true), jImg, jImgEdit, jEdit = null;
   // 그리기 편집기 열기 (뒤로가기로도 닫힘). 저장하면 { img: 합친 그림, edit: { base, marks } }
@@ -792,16 +794,15 @@
   function jPrev(src) {
     $("jImgPrev").innerHTML = src ? `<div class="thumbW"><img class="thumb" src="${src}" alt="첨부 사진"><button type="button" class="thumbX" aria-label="사진 지우기">✕</button></div><button type="button" class="sm" id="jDraw">✏️ 그리기·글씨</button>` : "";
     if (src) $("jDraw").onclick = async () => {
-      const same = jEdit && jEdit.date === ($("jDate").value || today());
-      const ed = jImgEdit !== undefined ? jImgEdit : same ? jEdit.imgEdit : null;
+      const ed = jImgEdit !== undefined ? jImgEdit : jEdit ? jEdit.imgEdit : null;
       const r = await editImage((ed && ed.base) || src, ed && ed.marks);
       if (!r) return;
       jImg = r.img; jImgEdit = r.edit || (ed ? null : null); if (!r.edit && ed) jImg = ed.base;
-      jPrev(jImg); $("jMsg").textContent = "그림을 고쳤어요. 일지 저장을 눌러야 반영돼요.";
+      jPrev(jImg); $("jMsg").textContent = "그림을 고쳤어요. 저장을 눌러야 반영돼요.";
     };
     if (!src) return;
     $("jImgPrev").querySelector(".thumb").onclick = () => viewImg(src);
-    $("jImgPrev").querySelector(".thumbX").onclick = () => { jImg = null; jImgEdit = null; jPrev(null); $("jMsg").textContent = "사진을 뺐어요. 일지 저장을 눌러야 반영돼요."; };
+    $("jImgPrev").querySelector(".thumbX").onclick = () => { jImg = null; jImgEdit = null; jPrev(null); $("jMsg").textContent = "사진을 뺐어요. 저장을 눌러야 반영돼요."; };
   }
   // 사진 크게 보기
   function viewImg(src, onEdit) {
@@ -820,65 +821,87 @@
     toast("그림을 저장했어요");
     return true;
   }
-  const memoTa = $("memoText");
-  memoTa.addEventListener("input", () => { memoTa.style.height = "auto"; memoTa.style.height = memoTa.scrollHeight + "px"; });
-  $("memoSave").onclick = async () => {
-    const v = memoTa.value.trim(); if (!v) return;
-    await Store.put("journal", { id: Store.uid("m"), kind: "memo", date: today(), time: nowHM(), text: v });
-    memoTa.value = ""; memoTa.style.height = "auto"; $("memoMsg").textContent = "저장했어요 · " + nowHM();
-    await loadData(); renderJournal();
-  };
+  // 일지 쓰는 칸 (홈·일지 화면이 같은 칸을 씀)
+  const jTa = $("jText"), jCard = $("diaryCard");
+  let jDraft = null; // 지난 일지를 고치는 동안 쓰던 글을 잠깐 보관
+  const jGrow = () => { jTa.style.height = "auto"; if (jTa.scrollHeight) jTa.style.height = jTa.scrollHeight + "px"; };
+  const jInJournal = () => jCard.parentElement.id === "jSlot";
+  const jDay = () => jEdit ? jEdit.date : jInJournal() ? $("jDate").value || today() : today();
+  function jTitle() { const d = jDay(); $("jTitle").textContent = (d === today() ? "오늘의" : d.slice(5).replace("-", "/")) + " 일지" + (jEdit ? " 고치기" : ""); }
+  function fillForm(j, draft) {
+    jEdit = j || null; jImg = draft ? draft.img : undefined; jImgEdit = draft ? draft.imgEdit : undefined;
+    const x = draft || j || {};
+    jTa.value = x.text || "";
+    getMood = chips($("moodChips"), MOODS, x.mood || [], true);
+    jPrev(x.img);
+    $("jSave").textContent = j ? "고친 내용 저장" : "저장";
+    jTitle(); jGrow();
+  }
+  const jEmpty = () => !jEdit && !jTa.value.trim() && !getMood().length && !jImg;
+  function jOpen(on) { jCard.classList.toggle("open", on); jGrow(); }
+  // 고치던 것을 끝내고 쓰던 글로 되돌림
+  function endEdit() { if (!jEdit) return; const d = jDraft; jDraft = null; fillForm(null, d); }
+  function formHome() {
+    if (!jInJournal()) { jTitle(); return; }
+    $("jHome").appendChild(jCard);
+    endEdit(); $("jCancel").hidden = true; $("jMsg").textContent = "";
+    jTitle(); jOpen(!jEmpty());
+  }
+  function formJournal() {
+    $("jSlot").appendChild(jCard); $("jCancel").hidden = false; $("jMsg").textContent = "";
+    jTitle(); jOpen(true);
+  }
+  function openWrite() { jOpen(true); jTa.focus(); }
+  jTa.addEventListener("input", jGrow);
+  jTa.addEventListener("focus", () => { if (!jEdit) $("jMsg").textContent = ""; jOpen(true); });
+  document.addEventListener("click", (e) => { // 아무것도 안 적고 다른 곳을 누르면 다시 접힘
+    if (!jInJournal() && jCard.classList.contains("open") && e.target.isConnected && !jCard.contains(e.target) && jEmpty()) jOpen(false);
+  });
+  $("jNew").onclick = () => { endEdit(); formJournal(); jTa.focus(); };
+  $("jCancel").onclick = formHome;
   $("jImgBtn").onclick = () => $("jImg").click();
   $("jImg").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; jImg = await shrink(f); jImgEdit = null; jPrev(jImg); e.target.value = ""; };
-  // PC: 일지 화면에서 Ctrl+V로 스크린샷 붙여넣기
+  // PC: 일지 칸이 보일 때 Ctrl+V로 스크린샷 붙여넣기
   document.addEventListener("paste", async (e) => {
-    if (!$("vJournal").classList.contains("on") || Markup.isOpen()) return;
+    if (!jCard.offsetParent || Markup.isOpen() || (e.target.matches && e.target.matches("input,textarea") && e.target !== jTa)) return;
     const it = [...(e.clipboardData ? e.clipboardData.items : [])].find((x) => x.type.startsWith("image/"));
     if (!it) return;
-    e.preventDefault();
+    e.preventDefault(); jOpen(true);
     jImg = await shrink(it.getAsFile()); jImgEdit = null; jPrev(jImg);
-    $("jMsg").textContent = "스크린샷을 붙여 넣었어요. 일지 저장을 눌러야 반영돼요.";
+    $("jMsg").textContent = "스크린샷을 붙여 넣었어요. 저장을 눌러야 반영돼요.";
   });
-  $("jDate").onchange = () => { jEdit = null; renderJournal(); };
+  $("jDate").onchange = () => { if (jEdit) formHome(); jTitle(); renderJournal(); };
   $("jSave").onclick = async () => {
     const text = $("jText").value.trim(), mood = getMood();
-    const d0 = $("jDate").value || today(), same = jEdit && jEdit.date === d0;
-    const img = jImg === undefined ? (same && jEdit.img) || null : jImg;
-    const imgEdit = jImgEdit === undefined ? (same && jEdit.imgEdit) || null : jImgEdit;
+    const img = jImg === undefined ? (jEdit && jEdit.img) || null : jImg;
+    const imgEdit = jImgEdit === undefined ? (jEdit && jEdit.imgEdit) || null : jImgEdit;
     if (!text && !mood.length && !img) { $("jMsg").textContent = "내용을 적어 주세요."; return; }
     $("jSave").disabled = true; $("jMsg").textContent = "저장하는 중…";
     try {
-      const d = $("jDate").value || today();
-      const e = Object.assign(jEdit && jEdit.date === d ? jEdit : { id: Store.uid("j"), kind: "diary", date: d, time: nowHM() }, { text, mood, img, imgEdit: img ? imgEdit : null });
       const wasEdit = !!jEdit;
+      const e = Object.assign({}, jEdit || { id: Store.uid("j"), kind: "diary", date: jDay(), time: nowHM() }, { text, mood, img, imgEdit: img ? imgEdit : null });
       await Store.put("journal", e);
-      await loadData(); renderJournal();
+      await loadData();
+      if (wasEdit) endEdit(); else fillForm(null);
+      formHome(); jTa.blur(); jOpen(!jEmpty()); renderJournal();
       $("jMsg").textContent = (wasEdit ? "고쳤어요 · " : "저장했어요 · ") + nowHM(); toast(wasEdit ? "일지를 고쳤어요" : "일지를 저장했어요");
     } catch (x) {
       $("jMsg").textContent = "저장하지 못했어요: " + (x && (x.message || x.name) || x);
     } finally { $("jSave").disabled = false; }
   };
-  function renderJournal(keepForm) {
+  function renderJournal() {
     const d = $("jDate").value || today();
-    // 글칸은 늘 새 일지용으로 비워 둠. 지난 일지는 아래 목록의 '수정'으로 불러와 고침
-    const fillForm = (j) => {
-      jEdit = j || null; jImg = undefined; jImgEdit = undefined;
-      $("jText").value = j ? j.text || "" : "";
-      getMood = chips($("moodChips"), MOODS, j ? j.mood || [] : [], true);
-      jPrev(j && j.img);
-      $("jSave").textContent = j ? "고친 내용 저장" : "일지 저장";
-    };
-    if (!keepForm) { fillForm(null); $("jMsg").textContent = ""; }
     const items = [
-      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge ${j.kind === "talk" ? "open" : "spot"}">${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p${j.kind === "talk" ? ' class="talkTxt"' : ""}>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id, edit: j.kind === "diary" })),
+      ...st.journal.filter((j) => j.date === d).map((j) => ({ t: j.time || "", html: `<span class="badge ${j.kind === "talk" ? "open" : "spot"}">${j.kind === "memo" && j.trade ? "체크" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}</span>${j.mood && j.mood.length ? esc(j.mood.join(" · ")) : ""}<p${j.kind === "talk" ? ' class="talkTxt"' : ""}>${esc(j.text || "")}</p>${j.img ? `<img class="thumb" data-img="${j.id}" src="${j.img}" alt="첨부 사진">` : ""}`, id: j.id, edit: isDiary(j) })),
       ...st.trades.filter((t) => t.date === d).map((t) => ({ t: t.time || "", html: `<span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b>${esc(t.coin)}</b> 진입 ${Chart.fmtP(t.en)}${t.why ? `<p>${esc(t.why)}</p>` : ""}${t.mood && t.mood.length ? `<p class="mut sm">심리: ${esc(t.mood.join(" · "))}${t.moodText ? " — " + esc(t.moodText) : ""}</p>` : ""}` })),
       ...st.trades.filter((t) => t.closeDate === d && t.status === "closed").map((t) => ({ t: "", html: `<span class="badge spot">청산</span><b>${esc(t.coin)}</b> ${t.pnl != null ? `<b class="${sgn(t.pnl)}">${money(t.pnl, curOf(t))}</b>` : ""}${t.lesson ? `<p>${esc(t.lesson)}</p>` : ""}` })),
     ].sort((a, b) => b.t.localeCompare(a.t));
-    $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.edit ? ` <button class="ghost sm" data-edit="${i.id}">수정</button>` : ""}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 메모·매매가 없어요.</div>`;
+    $("dayList").innerHTML = items.length ? `<div class="tl">${items.map((i) => `<div class="ent"><div class="t">${esc(i.t)}</div>${i.html}${i.edit ? ` <button class="ghost sm" data-edit="${i.id}">수정</button>` : ""}${i.id ? ` <button class="ghost sm danger" data-del="${i.id}">삭제</button>` : ""}</div>`).join("")}</div>` : `<div class="empty">이날의 기록이 없어요.</div>`;
     $("dayList").querySelectorAll("[data-edit]").forEach((b) => b.onclick = () => {
-      fillForm(st.journal.find((x) => x.id === b.dataset.edit));
-      $("jMsg").textContent = "수정하는 중이에요 · 저장하면 이 일지가 고쳐져요";
-      $("jText").scrollIntoView({ behavior: "smooth", block: "center" }); $("jText").focus();
+      const j = st.journal.find((x) => x.id === b.dataset.edit); if (!j) return;
+      if (!jEdit) jDraft = { text: jTa.value, mood: getMood(), img: jImg, imgEdit: jImgEdit };
+      formJournal(); fillForm(j);
+      jCard.scrollIntoView({ behavior: "smooth", block: "center" }); jTa.focus();
     });
     $("dayList").querySelectorAll("[data-img]").forEach((im) => im.onclick = () => {
       const j = st.journal.find((x) => x.id === im.dataset.img);
@@ -886,15 +909,15 @@
     });
     $("dayList").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
       if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더 누르면 삭제"; return; }
-      await Store.del("journal", b.dataset.del); await loadData(); renderJournal(true);
+      await Store.del("journal", b.dataset.del); await loadData(); renderJournal();
     });
     const days = [...new Set(st.journal.filter((j) => j.date !== d).map((j) => j.date))].sort().reverse().slice(0, 30);
     $("pastList").innerHTML = days.length ? days.map((day) => {
-      const js = st.journal.filter((j) => j.date === day), first = js.find((j) => j.kind === "diary") || js[0];
+      const js = st.journal.filter((j) => j.date === day), first = js.find(isDiary) || js[0];
       const moods = [...new Set(js.flatMap((j) => j.mood || []))];
       return `<div class="item" data-d="${day}"><div class="l1"><b class="num">${day}</b><span class="mut sm">${js.length}개</span></div><div class="l2"><span>${esc((first.text || "").slice(0, 60))}</span><span>${esc(moods.slice(0, 3).join(" · "))}</span></div></div>`;
     }).join("") : `<div class="empty">지난 일지가 없어요.</div>`;
-    $("pastList").querySelectorAll(".item").forEach((el) => el.onclick = () => { $("jDate").value = el.dataset.d; renderJournal(); scrollTo({ top: 0, behavior: "smooth" }); });
+    $("pastList").querySelectorAll(".item").forEach((el) => el.onclick = () => { $("jDate").value = el.dataset.d; $("jDate").onchange(); scrollTo({ top: 0, behavior: "smooth" }); });
   }
 
   // ---------- 회계 ----------
@@ -1297,7 +1320,7 @@
     if (n >= MIND.perDay) out.push({ lv: "warn", text: `오늘 진입 ${n}번 · 과매매 주의` });
     const noBasis = st.trades.filter((t) => t.status === "open" && !(t.basis && t.basis.length) && !t.why);
     if (noBasis.length) out.push({ lv: "warn", text: `근거 없이 들고 있는 포지션 ${noBasis.length}건`, go: "home" });
-    if (!st.journal.some((j) => j.date === today() && j.kind === "diary")) out.push({ lv: "info", text: "오늘 일지를 아직 안 썼어요", go: "journal" });
+    if (!st.journal.some((j) => j.date === today() && isDiary(j))) out.push({ lv: "info", text: "오늘 일지를 아직 안 썼어요", go: "journal" });
     return out;
   }
 
@@ -1527,7 +1550,7 @@
   const chkHtml = (list, okText) => list.length ? list.map((x) => `<div class="chk ${x.lv}"><i>${x.lv === "warn" ? "!" : "i"}</i><span>${esc(x.text)}</span>${x.go ? `<button class="sm ghost" data-go="${x.go}">보기</button>` : ""}</div>`).join("") : `<div class="chk ok"><i>✓</i><span>${okText}</span></div>`;
   function renderMindNow() {
     $("mcNow").innerHTML = chkHtml(mindChecks(), "지금은 차분해요 · 계획대로 가요");
-    $("mcNow").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => { const v = b.dataset.go === "home" ? "vHome" : "vJournal"; lastTab = v; showView(v); if (v === "vJournal") renderJournal(); });
+    $("mcNow").querySelectorAll("[data-go]").forEach((b) => b.onclick = () => { lastTab = "vHome"; showView("vHome"); if (b.dataset.go !== "home") openWrite(); });
   }
   function renderTilt() {
     const t = tiltScore(), word = { calm: "차분해요", warm: "조금 흔들려요", hot: "많이 흔들려요 (틸트)" }[t.lv];
@@ -1675,7 +1698,7 @@
         + (t.notes || []).map((n) => `\n  포지션 중 생각 (${n.d} ${n.tm}): ${n.text}`).join(""));
     }
     lines.push("", `[일지·메모 ${jr.length}개]`);
-    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" ? "메모" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
+    for (const j of jr) lines.push(`- ${j.date} ${j.time || ""} ${j.kind === "memo" && j.trade ? "체크" : j.kind === "shot" ? "차트" : j.kind === "talk" ? "상담" : "일지"}${(j.mood || []).length ? ` (심리: ${j.mood.join(", ")})` : ""}: ${(j.text || "").replace(/\n+/g, " ")}`);
     return lines.join("\n");
   }
   $("taCopy").onclick = () => copyText(auditText(taDays), `최근 ${taDays}일 복기 자료를 복사했어요`);
@@ -1802,7 +1825,7 @@
     await loadData(); await loadDrawings();
     if ($("vHome").classList.contains("on")) renderHome();
     if ($("vTrade").classList.contains("on")) renderTrades();
-    if ($("vJournal").classList.contains("on")) renderJournal(true);
+    if ($("vJournal").classList.contains("on")) renderJournal();
     if ($("vAcct").classList.contains("on")) renderAcct();
   }, (s, u) => {
     $("syncMsg").innerHTML = u ? `<b>${esc(u.email || "로그인됨")}</b> · ${esc(s.msg)}` : esc(s.msg);
@@ -1819,7 +1842,7 @@
     await loadData();
     if ($("vHome").classList.contains("on")) renderHome();
     if ($("vTrade").classList.contains("on")) renderTrades();
-    if ($("vJournal").classList.contains("on")) renderJournal(true);
+    if ($("vJournal").classList.contains("on")) renderJournal();
     if ($("vAcct").classList.contains("on")) renderAcct();
   };
   function bbView(s, on, live) {
