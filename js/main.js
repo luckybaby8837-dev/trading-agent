@@ -395,7 +395,8 @@
   let trFilter = "all";
   seg($("trFilter"), [["전체", "all"], ["진행 중", "open"], ["종료", "closed"]], trFilter, (v) => { trFilter = v; calSel = null; renderTrades(); });
   async function loadData() {
-    st.trades = (await Store.all("trades")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
+    // 업비트 USDT·USDC 사고팔기는 거래소 사이 돈 옮기기라 매매에서 뺌
+    st.trades = (await Store.all("trades")).filter((t) => !(t.venue === "upbit" && (t.coin === "USDT" || t.coin === "USDC"))).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.journal = (await Store.all("journal")).sort((a, b) => (b.date + (b.time || "")).localeCompare(a.date + (a.time || "")));
     st.cash = await Store.all("cash");
     const bbDates = st.trades.filter((t) => t.src === "bybit" && t.status === "closed").map((t) => t.closeDate || t.date).sort();

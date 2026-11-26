@@ -7,6 +7,7 @@
 const Upbit = (() => {
   const LOCAL = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   const DAYS = 365, WIN = 7 * 864e5;
+  const STABLE = new Set(["USDT", "USDC"]); // 달러 코인 사고팔기는 돈 옮기기(바이비트↔업비트)라 매매로 치지 않음
   const FROM = "2026-10-14"; // 이 날짜 이전 업비트 매매·입출금은 앱에 넣지 않음 (사용자 요청). 평균 매수가 계산엔 그대로 씀
   let server = false, configured = false, busy = false, timer = 0;
   let status = { msg: "", err: "", at: 0 };
@@ -89,7 +90,7 @@ const Upbit = (() => {
       const pos = {};
       for (const o of orders) {
         const coin = o.market.slice(4), vol = +o.executed_volume, fee = +o.paid_fee || 0;
-        if (!(vol > 0)) continue;
+        if (!(vol > 0) || STABLE.has(coin)) continue;
         const funds = await fundsOf(o); if (funds == null) continue;
         const p = (pos[coin] = pos[coin] || { qty: 0, cost: 0 });
         if (o.side === "bid") { p.qty += vol; p.cost += funds + fee; continue; }
@@ -112,7 +113,7 @@ const Upbit = (() => {
       // 지금 보유 코인 → 진행 중
       const live = new Set();
       for (const [coin, a] of Object.entries(acc)) {
-        if (!(a.qty > 0 && a.avg > 0) || a.qty * a.avg < 5000) continue;
+        if (!(a.qty > 0 && a.avg > 0) || a.qty * a.avg < 5000 || STABLE.has(coin)) continue;
         const id = "ubpos_" + coin; live.add(id);
         const old = byId.get(id), [d, tm] = kst(new Date().toISOString());
         const rec = { id, src: "upbit", venue: "upbit", coin, side: "buy", status: "open", en: a.avg, qty: a.qty };
@@ -132,7 +133,7 @@ const Upbit = (() => {
         }
       }
       // 기준일 이전 업비트 자동 기록은 지움 (동기화로 폰에서도 지워짐)
-      for (const t of all) if (t.src === "upbit" && t.status === "closed" && (t.closeDate || t.date || "") < FROM) { await Store.del("trades", t.id); n++; }
+      for (const t of all) if (t.src === "upbit" && (STABLE.has(t.coin) || (t.status === "closed" && (t.closeDate || t.date || "") < FROM))) { await Store.del("trades", t.id); n++; }
       for (const c of await Store.all("cash")) if (c.src === "upbit" && (c.date || "") < FROM) { await Store.del("cash", c.id); n++; }
       // 홈 자산용 잔고 (폰에서도 보이게 기록으로 남김)
       const snap = { id: "upbit_snapshot", krw: Math.round(krw), coins: Object.fromEntries(Object.entries(acc).filter(([, a]) => a.qty > 0).map(([c, a]) => [c, { qty: a.qty, avg: a.avg }])), at: Date.now() };
