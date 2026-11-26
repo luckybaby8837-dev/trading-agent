@@ -1018,7 +1018,7 @@
           + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b>${ubAuto != null ? " · 자동" : ""}</span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
       + `<div class="hrow"><div><span>이번 달</span><b class="${sgn(mPl || 0)}">${mPl == null ? "—" : sgC(mPl)}</b><small class="${sgn(mPl || 0)}">${mPl == null ? "" : pc(mPl, base - mPl)}</small></div>`
       + `<div><span>누적</span><b class="${sgn(pl || 0)}">${pl == null ? "—" : sgC(pl)}</b><small class="${sgn(pl || 0)}">${pl == null ? "" : pc(pl, base - pl)}</small></div></div>`;
-    { const c = cashCalc(); $("hHero").insertAdjacentHTML("beforeend", wdSugHtml(c) + (c.target > 0 ? wdBar(c) : "")); }
+    { const c = cashCalc(); $("hHero").insertAdjacentHTML("beforeend", `<div class="hwd"><span>이번 달 출금</span><b>${krw(c.mOutAll)}</b></div>` + wdSugHtml(c) + (c.target > 0 ? wdBar(c) : "")); }
     $("hHero").insertAdjacentHTML("beforeend", `<button class="hlink" id="hAcct">돈 관리 · 출금 내역 <i>›</i></button>`);
     $("hAcct").onclick = () => showView("vAcct");
     if ($("hSet")) $("hSet").onclick = () => showView("vSet");
@@ -1129,10 +1129,9 @@
   // 계산은 시크릿 노트와 같은 방식: 날짜순으로 손익·출금을 쌓으면서, "이익+원금(자동)" 출금은 그때까지 출금 가능한 이익만큼을 이익, 나머지를 원금으로 나눔
   const toKRWr = (v, c, r) => (c === "KRW" ? v : st.fx || r ? v * (r || st.fx.rate) : null);
   const WD_TYPE = { profit: "이익 출금", principal: "원금 출금", auto: "이익+원금 출금" };
-  const wdFixing = new Set();
   // 출금 합계에서 빼는 기록: 거래소 이동으로 표시한 것, 또는 업비트 자동 기록이 시작된 뒤의 노트 기록(같은 돈이 자동 기록과 겹침)
   const UB_AUTO_FROM = "2026-10-14";
-  const isDupNote = (c) => c.src === "note" && ((c.date || "") >= UB_AUTO_FROM || /합계/.test(c.memo || "")) && st.cash.some((u) => u.src === "upbit");
+  const isDupNote = (c) => c.src === "note" && ((c.date || "") >= UB_AUTO_FROM || /합계/.test(c.memo || ""));
   const cashOff = (c) => (c.move != null ? !!c.move : isDupNote(c));
   const offTag = (c) => (c.move ? "거래소 이동" : "중복 · 자동 기록과 겹침");
   function cashCalc() {
@@ -1146,7 +1145,7 @@
     for (const c of st.cash) {
       if (cashOff(c)) continue; // 바이비트↔업비트처럼 내 거래소끼리 옮긴 돈, 자동 기록과 겹친 노트 기록은 출금이 아님
       const k = toKRWr(c.amount, c.cur, c.rate); if (k == null) { ok = false; continue; }
-      ev.push({ d: c.date, t: c.kind, k: c.type, v: k, id: c.id, fix: c.fix, rec: c });
+      ev.push({ d: c.date, t: c.kind, k: c.type, v: k, id: c.id });
     }
     ev.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : (a.t === "pl" ? 0 : 1) - (b.t === "pl" ? 0 : 1)));
     let pl = 0, out = 0, outP = 0, inn = 0, mPl = 0, mOut = 0, mOutAll = 0, mOutP = 0, mIn = 0;
@@ -1155,11 +1154,7 @@
       const m = x.d.slice(0, 7) === ym;
       if (x.t === "pl") { pl += x.v; if (m) mPl += x.v; }
       else if (x.t === "out") {
-        let pp = x.k === "principal" ? x.v : x.k === "auto" ? Math.max(0, x.v - Math.max(0, pl - (out - outP))) : 0;
-        if (x.k === "auto") {
-          if (x.fix) pp = Math.min(x.v, x.fix.principal); // 이미 정해진 나눔은 그대로
-          else if (ok && !wdFixing.has(x.id)) { wdFixing.add(x.id); Store.put("cash", Object.assign({}, x.rec, { fix: { principal: pp } })).then(loadData).catch(() => wdFixing.delete(x.id)); }
-        }
+        const pp = x.k === "principal" ? x.v : x.k === "auto" ? Math.max(0, x.v - Math.max(0, pl - (out - outP))) : 0;
         out += x.v; outP += pp; split[x.id] = { profit: x.v - pp, principal: pp };
         if (m) { mOut += x.v - pp; mOutP += pp; mOutAll += x.v; }
       } else { inn += x.v; if (m) mIn += x.v; }
