@@ -1128,6 +1128,12 @@
   // 계산은 시크릿 노트와 같은 방식: 날짜순으로 손익·출금을 쌓으면서, "이익+원금(자동)" 출금은 그때까지 출금 가능한 이익만큼을 이익, 나머지를 원금으로 나눔
   const toKRWr = (v, c, r) => (c === "KRW" ? v : st.fx || r ? v * (r || st.fx.rate) : null);
   const WD_TYPE = { profit: "이익 출금", principal: "원금 출금", auto: "이익+원금 출금" };
+  const wdFixing = new Set();
+  // 출금 합계에서 빼는 기록: 거래소 이동으로 표시한 것, 또는 업비트 자동 기록이 시작된 뒤의 노트 기록(같은 돈이 자동 기록과 겹침)
+  const UB_AUTO_FROM = "2026-10-14";
+  const isDupNote = (c) => c.src === "note" && (c.date || "") >= UB_AUTO_FROM && st.cash.some((u) => u.src === "upbit");
+  const cashOff = (c) => (c.move != null ? !!c.move : isDupNote(c));
+  const offTag = (c) => (c.move ? "거래소 이동" : "중복 · 자동 기록과 겹침");
   function cashCalc() {
     const ym = ymNow(), ev = [];
     let ok = true;
@@ -1137,8 +1143,9 @@
       ev.push({ d: t.closeDate || t.date || "", t: "pl", v: k });
     }
     for (const c of st.cash) {
+      if (cashOff(c)) continue; // 바이비트↔업비트처럼 내 거래소끼리 옮긴 돈, 자동 기록과 겹친 노트 기록은 출금이 아님
       const k = toKRWr(c.amount, c.cur, c.rate); if (k == null) { ok = false; continue; }
-      ev.push({ d: c.date, t: c.kind, k: c.type, v: k, id: c.id });
+      ev.push({ d: c.date, t: c.kind, k: c.type, v: k, id: c.id, fix: c.fix, rec: c });
     }
     ev.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : (a.t === "pl" ? 0 : 1) - (b.t === "pl" ? 0 : 1)));
     let pl = 0, out = 0, outP = 0, inn = 0, mPl = 0, mOut = 0, mOutAll = 0, mOutP = 0, mIn = 0;
@@ -1147,7 +1154,11 @@
       const m = x.d.slice(0, 7) === ym;
       if (x.t === "pl") { pl += x.v; if (m) mPl += x.v; }
       else if (x.t === "out") {
-        const pp = x.k === "principal" ? x.v : x.k === "auto" ? Math.max(0, x.v - Math.max(0, pl - (out - outP))) : 0;
+        let pp = x.k === "principal" ? x.v : x.k === "auto" ? Math.max(0, x.v - Math.max(0, pl - (out - outP))) : 0;
+        if (x.k === "auto") {
+          if (x.fix) pp = Math.min(x.v, x.fix.principal); // 이미 정해진 나눔은 그대로
+          else if (ok && !wdFixing.has(x.id)) { wdFixing.add(x.id); Store.put("cash", Object.assign({}, x.rec, { fix: { principal: pp } })).then(loadData).catch(() => wdFixing.delete(x.id)); }
+        }
         out += x.v; outP += pp; split[x.id] = { profit: x.v - pp, principal: pp };
         if (m) { mOut += x.v - pp; mOutP += pp; mOutAll += x.v; }
       } else { inn += x.v; if (m) mIn += x.v; }
@@ -1160,15 +1171,15 @@
   const fromKRW = (v) => conv(v, "KRW");
   const FK = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
   function wdBar(c) {
-    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${FK(c.mOut)}</span></div>`;
+    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${krw(c.mOut)}</span></div>`;
     const r = c.mOut / c.target, p = Math.round(r * 100), done = r >= 1;
-    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${FK(c.mOut)} / ${FK(c.target)}` : `이번 달 이익 출금 ${FK(c.mOut)} / 목표 ${FK(c.target)} (${p}%)`}</span></div>`;
+    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${krw(c.mOut)} / ${krw(c.target)}` : `이번 달 이익 출금 ${krw(c.mOut)} / 목표 ${krw(c.target)} (${p}%)`}</span></div>`;
   }
   function wdSugHtml(c) {
     if (!c.ok && !st.fx) return "";
     if (c.sug > 0) return `<div class="wsug">이번 달 출금 추천 <b>${FK(c.sug)}</b> <small>이번 달 이익의 ${c.pct}%</small></div>`;
     if (c.mPl <= 0) return `<div class="wsug mutd">이번 달은 아직 이익이 없어서 출금 추천이 없어요</div>`;
-    return `<div class="wsug mutd">이번 달 추천만큼 이미 출금했어요 · 이번 달 이익 출금 ${FK(c.mOut)}</div>`;
+    return `<div class="wsug mutd">이번 달 추천만큼 이미 출금했어요 · 이번 달 이익 출금 ${krw(c.mOut)}</div>`;
   }
   const money2 = (x) => (x.cur === "KRW" ? krw(x.amount) : usd(x.amount));
   function renderCash() {
@@ -1176,10 +1187,10 @@
     $("wdBody").innerHTML = wdSugHtml(c) + wdBar(c)
       + `<div class="kv" style="margin-top:12px">
         <span>이번 달 실현 손익</span><b class="${sgn(c.mPl)}">${FK(c.mPl)}</b>
-        <span>이번 달 출금</span><b>${FK(c.mOutAll)}</b>
-        <span class="ind">└ 이익</span><b>${FK(c.mOut)}</b>
-        <span class="ind">└ 원금</span><b>${FK(c.mOutP)}</b>
-        <span>이번 달 입금</span><b>${FK(c.mIn)}</b>
+        <span>이번 달 출금</span><b>${krw(c.mOutAll)}</b>
+        <span class="ind">└ 이익</span><b>${krw(c.mOut)}</b>
+        <span class="ind">└ 원금</span><b>${krw(c.mOutP)}</b>
+        <span>이번 달 입금</span><b>${krw(c.mIn)}</b>
         <span>출금 가능 이익 <small class="mut">(누적 이익 − 이익 출금)</small></span><b>${FK(c.wdb)}</b></div>`;
     $("wdTarget").value = c.target || ""; $("wdPct").value = Store.pref.get("wdPct", "") || "";
     // 내역: 달마다 묶어서 전부
@@ -1187,13 +1198,19 @@
     const months = [...new Set(list.map((x) => x.date.slice(0, 7)))];
     $("wdList").innerHTML = list.length ? months.map((m) => {
       const xs = list.filter((x) => x.date.startsWith(m));
-      let o = 0, i = 0; for (const x of xs) { const k = toKRWr(x.amount, x.cur, x.rate) || 0; if (x.kind === "out") o += k; else i += k; }
-      return `<div class="wdm"><b>${m.replace("-", "년 ")}월</b><span>출금 ${FK(o)}${i ? ` · 입금 ${FK(i)}` : ""}</span></div>` + xs.map((x) => {
-        const sp = c.split[x.id], tag = x.kind === "out" ? WD_TYPE[x.type] || "출금" : "입금";
-        const detail = x.kind === "out" && x.type === "auto" && sp ? `<small class="mut">이익 ${FK(sp.profit)} · 원금 ${FK(sp.principal)}</small>` : "";
-        return `<div class="kvrow wdr"><span><span class="badge ${x.kind === "out" ? "spot" : "open"}">${tag}</span>${esc(x.date.slice(5))} · ${venueName[x.venue]}${x.src === "note" ? " · 노트" : ""}${x.memo ? " · " + esc(x.memo) : ""}${detail ? "<br>" + detail : ""}</span><span><b class="${x.kind === "in" ? "up" : ""}">${x.kind === "in" ? "+" : "−"}${money2(x)}</b> <button class="sm ghost danger" data-wdel="${x.id}">삭제</button></span></div>`;
+      let o = 0, i = 0; for (const x of xs) { if (cashOff(x)) continue; const k = toKRWr(x.amount, x.cur, x.rate) || 0; if (x.kind === "out") o += k; else i += k; }
+      return `<div class="wdm"><b>${m.replace("-", "년 ")}월</b><span>출금 ${krw(o)}${i ? ` · 입금 ${krw(i)}` : ""}</span></div>` + xs.map((x) => {
+        const sp = c.split[x.id], off = cashOff(x), tag = off ? offTag(x) : x.kind === "out" ? WD_TYPE[x.type] || "출금" : "입금";
+        const detail = !off && x.kind === "out" && x.type === "auto" && sp ? `<small class="mut">이익 ${krw(sp.profit)} · 원금 ${krw(sp.principal)}</small>` : "";
+        return `<div class="kvrow wdr"><span><span class="badge ${x.kind === "out" ? "spot" : "open"}">${tag}</span>${esc(x.date.slice(5))} · ${venueName[x.venue]}${x.src === "note" ? " · 노트" : ""}${x.memo ? " · " + esc(x.memo) : ""}${detail ? "<br>" + detail : ""}</span><span><b class="${off ? "mut" : x.kind === "in" ? "up" : ""}">${x.kind === "in" ? "+" : "−"}${money2(x)}</b> <button class="sm ghost" data-wmove="${x.id}">${off ? (x.kind === "in" ? "입금으로" : "출금으로") : "이동으로"}</button> <button class="sm ghost danger" data-wdel="${x.id}">삭제</button></span></div>`;
       }).join("");
     }).join("") : `<div class="empty">아직 출금·입금 기록이 없어요.<br>노트 기록은 설정 → 데이터 → 노트 백업을 다시 불러오면 들어와요.</div>`;
+    $("wdList").querySelectorAll("[data-wmove]").forEach((b) => b.onclick = async () => {
+      const x = st.cash.find((y) => y.id === b.dataset.wmove); if (!x) return;
+      const off = cashOff(x);
+      await Store.put("cash", Object.assign({}, x, { move: !off })); await loadData(); renderCash(); renderHome();
+      toast(off ? "합계에 다시 넣었어요" : "거래소 이동으로 바꿨어요 · 합계에서 빠져요");
+    });
     $("wdList").querySelectorAll("[data-wdel]").forEach((b) => b.onclick = async () => {
       if (b.dataset.s !== "1") { b.dataset.s = "1"; b.textContent = "한 번 더"; return; }
       await Store.del("cash", b.dataset.wdel); await loadData(); renderCash(); renderHome();
@@ -1215,7 +1232,7 @@
     $("shX").onclick = closeSheet;
     let kind = "out", venue = "bybit", type = "auto";
     const lab = () => { $("cAmtL").textContent = venue === "upbit" ? "금액 (₩)" : "금액 ($)"; $("cRateW").hidden = venue === "upbit"; };
-    chips($("cKind"), [["출금", "out"], ["입금", "in"]], [kind], false);
+    chips($("cKind"), [["출금", "out"], ["입금", "in"], ["거래소 이동", "move"]], [kind], false);
     $("cKind").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { kind = b.dataset.v; $("cTypeW").hidden = kind !== "out"; }));
     chips($("cVen"), [["바이비트", "bybit"], ["업비트", "upbit"]], [venue], false);
     $("cVen").querySelectorAll("button").forEach((b) => b.addEventListener("click", () => { venue = b.dataset.v; lab(); }));
@@ -1225,8 +1242,9 @@
     $("cSave").onclick = async () => {
       const amount = +$("cAmt").value;
       if (!(amount > 0)) { $("cErr").textContent = "금액을 넣어 주세요."; return; }
-      await Store.put("cash", { id: Store.uid("c"), kind, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", rate: +$("cRate").value || (st.fx ? st.fx.rate : 0), type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
-      await loadData(); closeSheet(); renderCash(); renderHome(); toast(kind === "out" ? "출금을 기록했어요" : "입금을 기록했어요");
+      const move = kind === "move"; if (move) kind = "out";
+      await Store.put("cash", { id: Store.uid("c"), kind, move, venue, amount, cur: venue === "upbit" ? "KRW" : "USD", rate: +$("cRate").value || (st.fx ? st.fx.rate : 0), type: kind === "out" ? type : "", date: $("cDate").value || today(), memo: $("cMemo").value.trim() });
+      await loadData(); closeSheet(); renderCash(); renderHome(); toast(move ? "거래소 이동을 기록했어요 (출금에서 빠져요)" : kind === "out" ? "출금을 기록했어요" : "입금을 기록했어요");
     };
   };
 
