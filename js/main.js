@@ -1132,7 +1132,7 @@
   const wdFixing = new Set();
   // 출금 합계에서 빼는 기록: 거래소 이동으로 표시한 것, 또는 업비트 자동 기록이 시작된 뒤의 노트 기록(같은 돈이 자동 기록과 겹침)
   const UB_AUTO_FROM = "2026-10-14";
-  const isDupNote = (c) => c.src === "note" && (c.date || "") >= UB_AUTO_FROM && st.cash.some((u) => u.src === "upbit");
+  const isDupNote = (c) => c.src === "note" && ((c.date || "") >= UB_AUTO_FROM || /합계/.test(c.memo || "")) && st.cash.some((u) => u.src === "upbit");
   const cashOff = (c) => (c.move != null ? !!c.move : isDupNote(c));
   const offTag = (c) => (c.move ? "거래소 이동" : "중복 · 자동 기록과 겹침");
   function cashCalc() {
