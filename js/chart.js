@@ -136,7 +136,7 @@ const Chart = (() => {
     const ms = Market.TF[tf].ms, n = bars.length, last = bars[n - 1].t;
     ind = { ichi: Ind.ichimoku(bars), bb: Ind.bollinger(bars), rsi: Ind.rsi(bars), volMa: Ind.sma(bars.map((b) => b.v), 20) };
     ind.dbl = Ind.myPull(bars, ind.bb, ind.rsi);
-    ind.st = Ind.structure(bars, 8); ind.lq = Ind.liquidity(bars, 3);
+    
     const T = (i) => lt(i < n ? bars[i].t : last + (i - n + 1) * ms);
     const ser = (arr, shift = 0, extra = 0) => {
       const out = [];
@@ -234,7 +234,6 @@ const Chart = (() => {
     if (show.rsi) rsiGuides(P);
     ctx.beginPath(); ctx.rect(0, 0, P.w, P.ph); ctx.clip();
     if (show.dbl) dblPaint(P);
-    structPaint(P);
     for (const d of drawings) paint(d, P, false);
     if (tool && temp.length && hover) paint(preview(), P, true);
     ctx.restore();
@@ -262,31 +261,7 @@ const Chart = (() => {
       ctx.restore();
     }
   }
-  // 50% 선(위 비싼 구간·아래 싼 구간), 유동성 선  (시장 구조·초크 표시는 2026-11-26 사용자 요청으로 지움)
-  function structPaint(P) {
-    if (!ind.st) return;
-    const ts = chart.timeScale(), xi = (i) => ts.logicalToCoordinate(i), n = bars.length;
-    const up = css("--up"), dn = css("--dn"), mut = css("--mut"), S0 = ind.st;
-    const on = (x) => x != null && x > -40 && x < P.w + 40;
-    const ln = (x1, y1, x2, y2) => { ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke(); };
-    ctx.save(); ctx.lineWidth = 1; ctx.textAlign = "center";
-    if (show.pd && S0.mid != null) {
-      const hiP = Math.max(S0.strong.p, S0.weak.p), loP = Math.min(S0.strong.p, S0.weak.p);
-      const x1 = Math.max(0, xi(Math.min(S0.strong.i, S0.weak.i)) ?? 0), yH = Y(hiP), yM = Y(S0.mid), yL = Y(loP);
-      if (yH != null && yM != null && yL != null && x1 < P.w) {
-        ctx.globalAlpha = 0.08; ctx.fillStyle = dn; ctx.fillRect(x1, yH, P.w - x1, yM - yH);
-        ctx.fillStyle = up; ctx.fillRect(x1, yM, P.w - x1, yL - yM);
-        ctx.globalAlpha = 0.75; ctx.strokeStyle = mut; ctx.setLineDash([6, 4]); ln(x1, yM, P.w, yM); ctx.setLineDash([]);
-      }
-    }
-    if (show.lq) for (const q of ind.lq) {
-      const xa = xi(q.from), xb = q.swept ? xi(q.end) : P.w, y = Y(q.p);
-      if (xa == null || xb == null || y == null || xb < 0 || xa > P.w) continue;
-      ctx.globalAlpha = q.swept ? 0.3 : 0.85; ctx.strokeStyle = css("--lq"); ctx.lineWidth = 1.5; ctx.setLineDash([1, 3]);
-      ln(xa, y, xb, y); ctx.setLineDash([]); ctx.lineWidth = 1;
-    }
-    ctx.restore();
-  }
+  // 50% 선·유동성 선·시장 구조·초크 표시는 2026-11-26 사용자 요청으로 지움
   function rsiAxis(P, W) {
     ctx.fillStyle = css("--chart-bg");
     ctx.fillRect(P.w + 1, P.ph - 7, W - P.w, P.h - P.ph + 6);

@@ -248,7 +248,7 @@
   Market.sub(Market.COINS.map((c) => `tickers.${c}USDT`));
 
   // 지표 메뉴
-  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"], ["dbl", "내 눌림 진입"], ["pd", "50% 선 (비싼·싼 구간)"], ["lq", "유동성 선 (쌍고점·쌍바닥)"]];
+  const IND = [["ichi", "일목균형표"], ["bb", "볼린저밴드"], ["vol", "거래량"], ["rsi", "RSI"], ["band", "손절 범위 ±1%"], ["dbl", "내 눌림 진입"]];
   function buildIndMenu() {
     const m = $("indMenu");
     const row = ([k, n]) => `<label><input type="checkbox" data-k="${k}" ${Chart.show[k] ? "checked" : ""}>${n}</label>`;
