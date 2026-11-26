@@ -136,7 +136,7 @@ const Chart = (() => {
     const ms = Market.TF[tf].ms, n = bars.length, last = bars[n - 1].t;
     ind = { ichi: Ind.ichimoku(bars), bb: Ind.bollinger(bars), rsi: Ind.rsi(bars), volMa: Ind.sma(bars.map((b) => b.v), 20) };
     ind.dbl = Ind.myPull(bars, ind.bb, ind.rsi);
-    ind.st = Ind.structure(bars, 8); ind.sti = Ind.structure(bars, 3); ind.lq = Ind.liquidity(bars, 3);
+    ind.st = Ind.structure(bars, 8); ind.lq = Ind.liquidity(bars, 3);
     const T = (i) => lt(i < n ? bars[i].t : last + (i - n + 1) * ms);
     const ser = (arr, shift = 0, extra = 0) => {
       const out = [];
@@ -262,7 +262,7 @@ const Chart = (() => {
       ctx.restore();
     }
   }
-  // 시장 구조: 50% 선(위 비싼 구간·아래 싼 구간), 스윙 점, BOS·CHoCH·FB, 강·약, 초크 ▲▼, 유동성 선
+  // 50% 선(위 비싼 구간·아래 싼 구간), 유동성 선  (시장 구조·초크 표시는 2026-11-26 사용자 요청으로 지움)
   function structPaint(P) {
     if (!ind.st) return;
     const ts = chart.timeScale(), xi = (i) => ts.logicalToCoordinate(i), n = bars.length;
@@ -284,41 +284,6 @@ const Chart = (() => {
       if (xa == null || xb == null || y == null || xb < 0 || xa > P.w) continue;
       ctx.globalAlpha = q.swept ? 0.3 : 0.85; ctx.strokeStyle = css("--lq"); ctx.lineWidth = 1.5; ctx.setLineDash([1, 3]);
       ln(xa, y, xb, y); ctx.setLineDash([]); ctx.lineWidth = 1;
-    }
-    if (show.st) {
-      ctx.fillStyle = mut; ctx.globalAlpha = 0.7;
-      for (const p of S0.H.concat(S0.L)) { const x = xi(p.i), y = Y(p.p); if (on(x) && y != null) { ctx.beginPath(); ctx.arc(x, y + (p.h ? -5 : 5), 1.8, 0, 7); ctx.fill(); } }
-      ctx.font = "10px " + css("--mono");
-      for (const e of S0.ev) {
-        const xa = xi(e.from), xb = xi(e.i), y = Y(e.p);
-        if (xa == null || xb == null || y == null || xb < -40 || xa > P.w + 40) continue;
-        const fb = e.type === "FB", col = fb ? mut : e.dir > 0 ? up : dn;
-        ctx.globalAlpha = fb ? 0.75 : 0.9; ctx.strokeStyle = col; ctx.fillStyle = col;
-        ctx.setLineDash(fb ? [2, 3] : []); ln(xa, y, xb, y); ctx.setLineDash([]);
-        const above = fb ? e.dir < 0 : e.dir > 0;
-        // FB는 꼬리가 넘은 봉 위(아래)에, BOS·CHoCH는 선 가운데에
-        if (fb) { const b = bars[e.i], yy = Y(above ? b.h : b.l); if (yy != null) ctx.fillText("FB", xb, yy + (above ? -5 : 13)); }
-        else ctx.fillText(e.type, (xa + xb) / 2, y + (above ? -4 : 11));
-      }
-      ctx.globalAlpha = 1; ctx.font = "bold 11px " + css("--font");
-      for (const [pt, txt] of [[S0.strong, "강"], [S0.weak, "약"]]) {
-        if (!pt) continue; const x = xi(pt.i), y = Y(pt.p); if (!on(x) || y == null) continue;
-        ctx.fillStyle = css("--tx"); ctx.fillText(txt, x, y + (pt.low ? 19 : -11));
-      }
-    }
-    if (show.ch && ind.sti) {
-      const from = S0.strong ? Math.min(S0.strong.i, S0.weak.i) : n;
-      for (const e of ind.sti.ev) {
-        if (e.type !== "CHoCH") continue;
-        const x = xi(e.i), b = bars[e.i]; if (!on(x)) continue;
-        const good = S0.mid != null && e.i >= from && (e.dir > 0 ? b.c <= S0.mid : b.c >= S0.mid);
-        ctx.globalAlpha = e.i < from ? 0.45 : good ? 1 : 0.3; ctx.fillStyle = e.dir > 0 ? up : dn;
-        const y = e.dir > 0 ? Y(b.l) + 9 : Y(b.h) - 9; if (y == null) continue;
-        ctx.beginPath();
-        if (e.dir > 0) { ctx.moveTo(x, y - 4); ctx.lineTo(x - 4, y + 3); ctx.lineTo(x + 4, y + 3); }
-        else { ctx.moveTo(x, y + 4); ctx.lineTo(x - 4, y - 3); ctx.lineTo(x + 4, y - 3); }
-        ctx.closePath(); ctx.fill();
-      }
     }
     ctx.restore();
   }
