@@ -1018,7 +1018,8 @@
           + `<div class="hsub">${bb ? `<span>바이비트 <b>${usd(bb)}</b>${bbAuto ? " · 자동" : ""}</span>` : ""}${ub ? `<span>업비트 <b>${krw(ub)}</b>${ubAuto != null ? " · 자동" : ""}</span>` : ""}${un ? `<span>미실현 <b class="${sgn(un)}">${sgC(un)}</b></span>` : ""}</div>`)
       + `<div class="hrow"><div><span>이번 달</span><b class="${sgn(mPl || 0)}">${mPl == null ? "—" : sgC(mPl)}</b><small class="${sgn(mPl || 0)}">${mPl == null ? "" : pc(mPl, base - mPl)}</small></div>`
       + `<div><span>누적</span><b class="${sgn(pl || 0)}">${pl == null ? "—" : sgC(pl)}</b><small class="${sgn(pl || 0)}">${pl == null ? "" : pc(pl, base - pl)}</small></div></div>`;
-    { const c = cashCalc(); $("hHero").insertAdjacentHTML("beforeend", `<div class="hwd"><span>이번 달 출금</span><b>${krw(c.mOutAll)}</b></div>` + wdSugHtml(c) + (c.target > 0 ? wdBar(c) : "")); }
+    { const c = cashCalc(), done = c.target > 0 && c.mOutAll >= c.target;
+      $("hHero").insertAdjacentHTML("beforeend", (c.target > 0 ? wdBar(c) : `<div class="hwd"><span>이번 달 출금</span><b>${krw(c.mOutAll)}</b></div>`) + (done ? "" : wdSugHtml(c))); }
     $("hHero").insertAdjacentHTML("beforeend", `<button class="hlink" id="hAcct">돈 관리 · 출금 내역 <i>›</i></button>`);
     $("hAcct").onclick = () => showView("vAcct");
     if ($("hSet")) $("hSet").onclick = () => showView("vSet");
@@ -1167,9 +1168,9 @@
   const fromKRW = (v) => conv(v, "KRW");
   const FK = (v) => { const x = fromKRW(v); return x == null ? "—" : fmtC(x); };
   function wdBar(c) {
-    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 이익 출금 ${krw(c.mOut)}</span></div>`;
-    const r = c.mOut / c.target, p = Math.round(r * 100), done = r >= 1;
-    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${krw(c.mOut)} / ${krw(c.target)}` : `이번 달 이익 출금 ${krw(c.mOut)} / 목표 ${krw(c.target)} (${p}%)`}</span></div>`;
+    if (!(c.target > 0)) return `<div class="wprog"><span>이번 달 출금 ${krw(c.mOutAll)}</span></div>`;
+    const r = c.mOutAll / c.target, p = Math.round(r * 100), done = r >= 1;
+    return `<div class="wprog${done ? " ok" : ""}"><div class="wbar"><i style="width:${Math.min(100, p)}%"></i></div><span>${done ? `✓ 이번 달 출금 목표 달성 · ${krw(c.mOutAll)} / ${krw(c.target)} (${p}%)` : `이번 달 출금 ${krw(c.mOutAll)} / 목표 ${krw(c.target)} (${p}%)`}</span></div>`;
   }
   function wdSugHtml(c) {
     if (!c.ok && !st.fx) return "";
