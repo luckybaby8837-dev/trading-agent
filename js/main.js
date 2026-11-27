@@ -415,6 +415,11 @@
     return !!from && (t.closeDate || t.date) >= from;
   };
   const realPnl = (t) => (shadowed(t) ? null : t.pnl ?? tradePnl(t));
+  // 본절: 수수료를 뺀 손익이 진입 금액(진입가 × 수량)의 ±0.2% 안이면 본절 (2026-11-27 사용자 기준). 승률 계산에서는 뺌
+  const BE_PCT = 0.2;
+  const beBy = (p, base) => p != null && base > 0 && Math.abs(p) <= base * BE_PCT / 100;
+  const isBE = (t) => t.status === "closed" && beBy(realPnl(t), (t.en || 0) * (t.qty || 0));
+  const isWin = (t) => realPnl(t) > 0 && !isBE(t), isLoss = (t) => realPnl(t) < 0 && !isBE(t);
   // 차트에 진행 중 포지션의 진입·손절·익절 선 (바이비트 차트라 업비트 원화 기록은 제외)
   function updatePosLines() { Chart.setPositions(st.trades.filter((t) => t.status === "open" && t.coin === st.coin && t.venue !== "upbit")); }
   // 매매 목록: 진행 중 → 달(요약, 접기) → 날짜(그날 손익) → 한 줄 매매
@@ -426,7 +431,7 @@
     const ex = open ? lp : t.exit, s = t.side === "short" ? -1 : 1;
     const pct = ex && t.en ? (ex / t.en - 1) * 100 * s : null;
     const dup = shadowed(t);
-    return `<div class="tline${dup ? " dup" : ""}" data-id="${t.id}"${dup ? ' title="자동 기록과 겹쳐서 손익 합계에서 뺐어요"' : ""}><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b><span class="tv">${venueName[t.venue]}${dup ? " · 노트 (중복, 합계 제외)" : ""}</span>
+    return `<div class="tline${dup ? " dup" : ""}" data-id="${t.id}"${dup ? ' title="자동 기록과 겹쳐서 손익 합계에서 뺐어요"' : ""}><span class="badge ${t.side === "buy" ? "spot" : t.side}">${sideName[t.side]}</span><b class="tc">${esc(t.coin)}</b>${!open && isBE(t) ? '<i class="betag">본절</i>' : ""}<span class="tv">${venueName[t.venue]}${dup ? " · 노트 (중복, 합계 제외)" : ""}</span>
       <span class="tp"><b class="${sgn(p || 0)}">${p == null ? "—" : (p > 0 ? "+" : "") + money(p, cur)}</b><small class="${sgn(pct || 0)}">${pct == null ? "" : pctS(pct)}</small></span></div>`;
   }
   // 달력 (매매 기록 맨 위에 항상): 날마다 손익(색), 익절·손절 수, 보유 중인 포지션 띠. 날짜를 누르면 아래 목록이 그날 매매로 바뀜, 다시 누르면 원래대로
@@ -444,24 +449,24 @@
     const heldOn = (d) => live.filter((t) => t.date && t.date <= d && (t.status === "open" ? d <= td : d <= dOf(t)) && !(t.status === "closed" && t.date === dOf(t)));
     const cells = [];
     for (let i = 0; i < first.getDay(); i++) cells.push(`<div class="cd empty"></div>`);
-    let mSum = 0, mOk = true, mTp = 0, mSl = 0;
+    let mSum = 0, mOk = true, mTp = 0, mSl = 0, mBe = 0;
     for (let n = 1; n <= nDays; n++) {
       const d = calM + "-" + String(n).padStart(2, "0"), cl = closedOn(d), held = heldOn(d), sum = sumPnl(cl);
-      const tp = cl.filter((t) => realPnl(t) > 0).length, sl = cl.filter((t) => realPnl(t) < 0).length;
-      mTp += tp; mSl += sl; if (sum == null) mOk = false; else mSum += sum;
+      const tp = cl.filter(isWin).length, sl = cl.filter(isLoss).length, be = cl.filter(isBE).length;
+      mTp += tp; mSl += sl; mBe += be; if (sum == null) mOk = false; else mSum += sum;
       const ins = live.filter((t) => t.date === d).length;
       const sides = [...new Set(held.map((t) => t.side === "buy" ? "spot" : t.side))];
-      cells.push(`<button class="cd${cl.length ? (sum > 0 ? " win" : sum < 0 ? " loss" : "") : ""}${d === td ? " today" : ""}${d === calSel ? " sel" : ""}" data-d="${d}">
+      cells.push(`<button class="cd${cl.length && be < cl.length ? (sum > 0 ? " win" : sum < 0 ? " loss" : "") : ""}${d === td ? " today" : ""}${d === calSel ? " sel" : ""}" data-d="${d}">
         <span class="cn">${n}</span>
         ${cl.length && sum != null ? `<b class="${sgn(sum)}">${shortC(sum)}</b>` : ""}
-        <span class="cm">${tp ? `<i class="tp">익${tp > 1 ? tp : ""}</i>` : ""}${sl ? `<i class="sl">손${sl > 1 ? sl : ""}</i>` : ""}${ins ? `<i class="in">●${ins > 1 ? ins : ""}</i>` : ""}</span>
+        <span class="cm">${tp ? `<i class="tp">익${tp > 1 ? tp : ""}</i>` : ""}${sl ? `<i class="sl">손${sl > 1 ? sl : ""}</i>` : ""}${be ? `<i class="be">본${be > 1 ? be : ""}</i>` : ""}${ins ? `<i class="in">●${ins > 1 ? ins : ""}</i>` : ""}</span>
         ${sides.length ? `<span class="hold">${sides.map((s) => `<i class="${s}"></i>`).join("")}</span>` : ""}
       </button>`);
     }
     const wr = mTp + mSl ? Math.round(mTp / (mTp + mSl) * 100) : 0;
     box.innerHTML = `<div class="tgroup cal">
       <div class="calh"><button id="calPrev" aria-label="이전 달">‹</button><b>${y}년 ${mo}월</b><button id="calNext" aria-label="다음 달">›</button></div>
-      <div class="cals"><span>손익 <b class="${sgn(mSum)}">${mOk ? sgC(mSum) : "—"}</b></span><span><i class="tp">익절</i> ${mTp}</span><span><i class="sl">손절</i> ${mSl}</span><span>승률 ${wr}%</span></div>
+      <div class="cals"><span>손익 <b class="${sgn(mSum)}">${mOk ? sgC(mSum) : "—"}</b></span><span><i class="tp">익절</i> ${mTp}</span><span><i class="sl">손절</i> ${mSl}</span>${mBe ? `<span><i class="be">본절</i> ${mBe}</span>` : ""}<span>승률 ${wr}%</span></div>
       <div class="cgrid">${WD.map((w, i) => `<span class="cw${i === 0 ? " sun" : i === 6 ? " sat" : ""}">${w}</span>`).join("")}${cells.join("")}</div>
       <div class="clg"><span><i class="hold-k long"></i>롱 보유</span><span><i class="hold-k short"></i>숏 보유</span><span><i class="hold-k spot"></i>현물 보유</span><span>● 진입</span></div>
     </div>`;
@@ -503,8 +508,8 @@
       const sorted = closed.slice().sort((a, b) => (dOf(b) + (b.time || "")).localeCompare(dOf(a) + (a.time || "")));
       const months = [...new Set(sorted.map((t) => dOf(t).slice(0, 7)))];
       for (const m of months) {
-        const ts = sorted.filter((t) => dOf(t).startsWith(m)), counted = ts.filter((t) => realPnl(t) != null);
-        const wins = counted.filter((t) => realPnl(t) > 0).length, sum = sumPnl(ts);
+        const ts = sorted.filter((t) => dOf(t).startsWith(m)), counted = ts.filter((t) => realPnl(t) != null && !isBE(t));
+        const wins = counted.filter(isWin).length, sum = sumPnl(ts);
         const isOpen = openMonths.has(m);
         let body = "";
         if (isOpen) {
@@ -946,12 +951,12 @@
     const closed = st.trades.filter((t) => t.status === "closed" && inRange(t.closeDate || t.date) && !shadowed(t));
     const sum = (v) => closed.filter((t) => t.venue === v).reduce((a, t) => a + (realPnl(t) ?? 0), 0);
     const by = sum("bybit"), ub = sum("upbit"), tot = (toKrw(by, "USD") ?? 0) + ub;
-    const wins = closed.filter((t) => (t.pnl ?? 0) > 0).length;
+    const wins = closed.filter(isWin).length, bes = closed.filter(isBE).length, dec = closed.filter((t) => isWin(t) || isLoss(t)).length;
     $("pnlBody").innerHTML = `<div class="kv" style="margin-top:12px">
       <span>바이비트 (선물)</span><b class="${sgn(by)}">${usd(by)}${st.fx ? ` <span class="mut sm">${krw(by * st.fx.rate)}</span>` : ""}</b>
       <span>업비트 (현물)</span><b class="${sgn(ub)}">${krw(ub)}</b>
       <span>합계 (원화)</span><b class="${sgn(tot)}" style="font-size:18px">${krw(tot)}</b>
-      <span>종료한 매매</span><b>${closed.length}건 · 수익 ${wins}건${closed.length ? ` (${Math.round(wins / closed.length * 100)}%)` : ""}</b>
+      <span>종료한 매매</span><b>${closed.length}건 · 수익 ${wins}건${bes ? ` · 본절 ${bes}건` : ""}${dec ? ` (승률 ${Math.round(wins / dec * 100)}%)` : ""}</b>
     </div>`;
     const open = st.trades.filter((t) => t.status === "open");
     $("openBody").innerHTML = open.length ? `<table><tr><th>포지션</th><th>진입</th><th>현재</th><th>평가 손익</th></tr>${open.map((t) => {
@@ -1279,7 +1284,7 @@
   function streakNormal() {
     const from = daysAgo(89), es = entries(from).filter((e) => e.closed && e.pl != null && e.cd >= from);
     if (es.length < 10) return null;
-    const p = es.filter((e) => e.pl > 0).length / es.length, q = 1 - p, N = Math.max(es.length, 30);
+    const d = es.filter((e) => !e.be).length, p = d ? es.filter((e) => e.win).length / d : 0, q = 1 - p, N = Math.max(es.length, 30);
     if (p <= 0) return null;
     return { p, N, n: es.length, max: q <= 0 ? 0 : Math.max(1, Math.round(Math.log(N * p) / Math.log(1 / q))) };
   }
@@ -1300,12 +1305,14 @@
       e.closed = e.list.every((x) => x.status === "closed");
       let pl = 0, ok = e.closed; for (const x of e.list) { const p = realPnl(x); if (p == null) continue; const u = usdOf(p, curOf(x)); if (u == null) ok = false; else pl += u; }
       e.pl = ok ? pl : null;
+      let base = 0; for (const x of e.list) { const u = usdOf((x.en || 0) * (x.qty || 0), curOf(x)); if (u) base += u; }
+      e.be = e.closed && beBy(e.pl, base); e.win = e.pl > 0 && !e.be; e.loss = e.pl < 0 && !e.be;
       const cts = e.list.map(closeTs).filter(Boolean); e.cts = cts.length ? Math.max(...cts) : null;
       e.cd = e.list.map((x) => x.closeDate || x.date).sort().pop();
     }
     return [...m.values()];
   }
-  const lossCloses = () => st.trades.filter((t) => t.status === "closed" && !shadowed(t) && realPnl(t) < 0).map((t) => ({ t, ts: closeTs(t) })).filter((x) => x.ts);
+  const lossCloses = () => st.trades.filter((t) => t.status === "closed" && !shadowed(t) && isLoss(t)).map((t) => ({ t, ts: closeTs(t) })).filter((x) => x.ts);
   // 손절 직후(MIND.cool분 안) 들어간 진입
   function revenge(es) {
     const ls = lossCloses(), out = [];
@@ -1318,7 +1325,7 @@
   }
   function lossStreak() {
     const es = entries(daysAgo(60)).filter((e) => e.closed && e.pl != null).sort((a, b) => (b.cd + (b.cts || 0)).localeCompare(a.cd + (a.cts || 0)));
-    let n = 0; for (const e of es) { if (e.pl < 0) n++; else break; }
+    let n = 0; for (const e of es) { if (e.be) continue; if (e.pl < 0) n++; else break; }
     return { n, last: es[0] && es[0].cd };
   }
   function mindChecks() {
@@ -1408,23 +1415,23 @@
   }
   function weekStats(n = 7) {
     const from = daysAgo(n - 1), cl = st.trades.filter((t) => t.status === "closed" && (t.closeDate || t.date) >= from);
-    let pl = 0, wins = 0, ok = true;
-    for (const t of cl) { const p = pnlOf(t); if (p == null) continue; if (p > 0) wins++; const u = usdOf(p, curOf(t)); if (u == null) ok = false; else pl += u; }
+    let pl = 0, wins = 0, loss = 0, be = 0, ok = true;
+    for (const t of cl) { const p = pnlOf(t); if (p == null) continue; if (isBE(t)) be++; else if (p > 0) wins++; else if (p < 0) loss++; const u = usdOf(p, curOf(t)); if (u == null) ok = false; else pl += u; }
     const opened = st.trades.filter((t) => t.date >= from);
     const withBasis = opened.filter((t) => (t.basis && t.basis.length) || t.why).length;
     const moods = {}; for (const t of opened) for (const m of t.mood || []) moods[m] = (moods[m] || 0) + 1;
     for (const j of st.journal.filter((j) => j.date >= from)) for (const m of j.mood || []) moods[m] = (moods[m] || 0) + 1;
     const top = Object.entries(moods).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([m, c]) => `${m} ${c}`);
-    return { n: cl.length, wins, pl: ok ? pl : null, opened: opened.length, withBasis, top };
+    return { n: cl.length, wins, loss, be, pl: ok ? pl : null, opened: opened.length, withBasis, top };
   }
   // 차트분석팀: 근거 칩별 성과
   function basisStats() {
     const m = {};
     for (const t of st.trades.filter((t) => t.status === "closed")) {
       const p = pnlOf(t); if (p == null) continue; const u = usdOf(p, curOf(t)); if (u == null) continue;
-      for (const b of t.basis || []) { const o = (m[b] = m[b] || { n: 0, w: 0, pl: 0 }); o.n++; if (p > 0) o.w++; o.pl += u; }
+      for (const b of t.basis || []) { const o = (m[b] = m[b] || { n: 0, w: 0, d: 0, pl: 0 }); o.n++; if (isWin(t)) o.w++; if (!isBE(t)) o.d++; o.pl += u; }
     }
-    return Object.entries(m).map(([b, o]) => ({ b, ...o, rate: o.w / o.n })).sort((a, b) => b.n - a.n || b.rate - a.rate);
+    return Object.entries(m).map(([b, o]) => ({ b, ...o, rate: o.d ? o.w / o.d : 0 })).sort((a, b) => b.n - a.n || b.rate - a.rate);
   }
   // 트렌드팀: 시장 온도
   let lsr = {}, lsrAt = 0;
@@ -1451,7 +1458,7 @@
     { id: "vTRisk", name: "🛡 리스크 매니저", role: "손절 · 수량 · 레버리지 · 하루 손실 한도 · 거부권", sum: () => { const r = riskChecks(); if (r.length) return r[0].text + (r.length > 1 ? ` 외 ${r.length - 1}건` : ""); const eq = futEq(), c = riskCfg(); return eq ? `이상 없음 · 오늘 손실 여유 ${Math.max(0, c.day + todayFutPnl() / eq * 100).toFixed(1)}%` : "바이비트 자산을 알면 % 기준으로 심사해요"; }, warn: () => riskChecks().length > 0 },
     { id: "vTMind", name: "🧠 심리 코치", role: "복수 매매 · 연속 손절 · 과매매 · 근거 없는 진입", sum: () => { const w = mindChecks().filter((x) => x.lv === "warn"); return w.length ? w[0].text + (w.length > 1 ? ` 외 ${w.length - 1}건` : "") : "지금은 차분해요"; }, warn: () => mindChecks().some((x) => x.lv === "warn") },
     { id: "vTTalk", name: "🛋 상담사", role: "내 이야기를 들어주는 대화 상대", sum: () => { const t = tiltScore(); return t.v >= 30 ? `틸트 ${t.v}점 · 이야기 나눠 볼까요?` : "언제든 털어놓으세요"; } },
-    { id: "vTData", name: "📊 데이터 분석가", role: "근거 · 시간봉 · 요일 · 시간대 · 심리별 성과", sum: () => { const es = entries(daysAgo(89)).filter((e) => e.closed && e.pl != null && e.cd >= daysAgo(89)); const w = es.filter((e) => e.pl > 0).length; return es.length ? `최근 90일 ${es.length}건 · 승률 ${Math.round(w / es.length * 100)}%` : "종료한 매매가 쌓이면 성과를 나눠 보여줘요"; } },
+    { id: "vTData", name: "📊 데이터 분석가", role: "근거 · 시간봉 · 요일 · 시간대 · 심리별 성과", sum: () => { const es = entries(daysAgo(89)).filter((e) => e.closed && e.pl != null && e.cd >= daysAgo(89)); const w = es.filter((e) => e.win).length, d = es.filter((e) => !e.be).length; return es.length ? `최근 90일 ${es.length}건 · 승률 ${d ? Math.round(w / d * 100) : 0}%` : "종료한 매매가 쌓이면 성과를 나눠 보여줘요"; } },
   ];
   function renderTeamList() {
     $("teamList").innerHTML = TEAMS.map((t, i) => `<div class="item team" data-i="${i}">
@@ -1490,30 +1497,30 @@
     const from = dsDays ? daysAgo(dsDays - 1) : "";
     const es = entries(from).filter((e) => e.closed && e.pl != null && e.cd >= from);
     if (!es.length) { $("dsFind").innerHTML = `<div class="empty">이 기간에 종료한 매매가 없어요.</div>`; $("dsBody").innerHTML = ""; return; }
-    const wins = es.filter((e) => e.pl > 0), losses = es.filter((e) => e.pl < 0);
+    const wins = es.filter((e) => e.win), losses = es.filter((e) => e.loss);
     const sum = es.reduce((a, e) => a + e.pl, 0);
     const aw = wins.length ? wins.reduce((a, e) => a + e.pl, 0) / wins.length : 0, al = losses.length ? losses.reduce((a, e) => a + e.pl, 0) / losses.length : 0;
     const groups = [];
     const body = DIMS.map(([name, fn]) => {
       const m = new Map();
-      for (const e of es) for (const k of fn(e)) { const o = m.get(k) || { n: 0, w: 0, pl: 0 }; o.n++; if (e.pl > 0) o.w++; o.pl += e.pl; m.set(k, o); }
+      for (const e of es) for (const k of fn(e)) { const o = m.get(k) || { n: 0, w: 0, d: 0, pl: 0 }; o.n++; if (e.win) o.w++; if (!e.be) o.d++; o.pl += e.pl; m.set(k, o); }
       const rows = [...m.entries()].sort((a, b) => b[1].n - a[1].n || b[1].pl - a[1].pl);
-      for (const [k, o] of rows) if (o.n >= 5 && k !== "모름") groups.push({ name, k, ...o, rate: o.w / o.n });
+      for (const [k, o] of rows) if (o.n >= 5 && k !== "모름") groups.push({ name, k, ...o, rate: o.d ? o.w / o.d : 0 });
       if (!rows.length) return "";
       if (rows.every(([k]) => k === "모름")) return "";
-      return `<div class="card"><h3>${name}</h3><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th><th>1번 평균</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${Math.round(o.w / o.n * 100)}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td><td class="${sgn(o.pl)}">${usdS(o.pl / o.n)}</td></tr>`).join("")}</table></div>`;
+      return `<div class="card"><h3>${name}</h3><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th><th>1번 평균</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${o.d ? Math.round(o.w / o.d * 100) : 0}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td><td class="${sgn(o.pl)}">${usdS(o.pl / o.n)}</td></tr>`).join("")}</table></div>`;
     }).join("");
     const good = groups.filter((g) => g.pl > 0 && g.rate >= 0.5).sort((a, b) => b.pl - a.pl).slice(0, 3);
     const bad = groups.filter((g) => g.pl < 0).sort((a, b) => a.pl - b.pl).slice(0, 3);
     const line = (g, ok) => `<div class="chk ${ok ? "ok" : "warn"}"><i>${ok ? "✓" : "!"}</i><span>${esc(g.name)} <b>${esc(g.k)}</b> · ${g.n}건 승률 ${Math.round(g.rate * 100)}% · <b class="${sgn(g.pl)}">${usdS(g.pl)}</b></span></div>`;
     // 시간순 누적 손익으로 최대 연속 손실 · 최대 낙폭
     const ex = { run: 0, dd: 0 };
-    { let r = 0, cum = 0, peak = 0; for (const e of es.slice().sort((a, b) => (a.cd + (a.cts || 0)).localeCompare(b.cd + (b.cts || 0)))) { r = e.pl < 0 ? r + 1 : 0; ex.run = Math.max(ex.run, r); cum += e.pl; peak = Math.max(peak, cum); ex.dd = Math.max(ex.dd, peak - cum); } }
+    { let r = 0, cum = 0, peak = 0; for (const e of es.slice().sort((a, b) => (a.cd + (a.cts || 0)).localeCompare(b.cd + (b.cts || 0)))) { r = e.loss ? r + 1 : e.be ? r : 0; ex.run = Math.max(ex.run, r); cum += e.pl; peak = Math.max(peak, cum); ex.dd = Math.max(ex.dd, peak - cum); } }
     const sn = streakNormal();
     const rv = revenge(es);
     let rvLine = "";
-    if (rv.length) { const p = rv.reduce((a, x) => a + x.e.pl, 0), w = rv.filter((x) => x.e.pl > 0).length; rvLine = `<div class="chk ${p < 0 ? "warn" : "info"}"><i>${p < 0 ? "!" : "i"}</i><span>손절 ${MIND.cool}분 안에 다시 들어간 매매 ${rv.length}건 · 승률 ${Math.round(w / rv.length * 100)}% · <b class="${sgn(p)}">${usdS(p)}</b></span></div>`; }
-    $("dsFind").innerHTML = `<div class="kv"><span>종료한 매매 <small class="mut">(진입 단위)</small></span><b>${es.length}건 · 승률 ${Math.round(wins.length / es.length * 100)}%</b>
+    if (rv.length) { const p = rv.reduce((a, x) => a + x.e.pl, 0), w = rv.filter((x) => x.e.win).length, rd = rv.filter((x) => !x.e.be).length; rvLine = `<div class="chk ${p < 0 ? "warn" : "info"}"><i>${p < 0 ? "!" : "i"}</i><span>손절 ${MIND.cool}분 안에 다시 들어간 매매 ${rv.length}건 · 승률 ${rd ? Math.round(w / rd * 100) : 0}% · <b class="${sgn(p)}">${usdS(p)}</b></span></div>`; }
+    $("dsFind").innerHTML = `<div class="kv"><span>종료한 매매 <small class="mut">(진입 단위)</small></span><b>${es.length}건${es.some((e) => e.be) ? ` (본절 ${es.filter((e) => e.be).length})` : ""} · 승률 ${wins.length + losses.length ? Math.round(wins.length / (wins.length + losses.length) * 100) : 0}%</b>
         <span>손익 (달러 환산)</span><b class="${sgn(sum)}">${usdS(sum)}</b>
         <span>평균 수익 / 평균 손실</span><b><span class="up">${usdS(aw)}</span> / <span class="dn">${usdS(al)}</span></b>
         <span>손익비</span><b>${al ? (aw / -al).toFixed(2) : "—"}</b>
@@ -1580,7 +1587,7 @@
   }
   function statRows(es, fn) {
     const m = new Map();
-    for (const e of es) for (const k of fn(e)) { const o = m.get(k) || { n: 0, w: 0, pl: 0 }; o.n++; if (e.pl > 0) o.w++; o.pl += e.pl; m.set(k, o); }
+    for (const e of es) for (const k of fn(e)) { const o = m.get(k) || { n: 0, w: 0, d: 0, pl: 0 }; o.n++; if (e.win) o.w++; if (!e.be) o.d++; o.pl += e.pl; m.set(k, o); }
     return [...m.entries()].sort((a, b) => b[1].n - a[1].n);
   }
   function renderFeel() {
@@ -1593,7 +1600,7 @@
     ];
     const html = sets.map(([name, fn]) => {
       const rows = statRows(es, fn); if (!rows.length) return "";
-      return `<div class="fsub">${name}</div><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${Math.round(o.w / o.n * 100)}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td></tr>`).join("")}</table>`;
+      return `<div class="fsub">${name}</div><table class="dst"><tr><th></th><th>건수</th><th>승률</th><th>손익($)</th></tr>${rows.map(([k, o]) => `<tr class="${o.n < 5 ? "few" : ""}"><td>${esc(k)}</td><td>${o.n}</td><td>${o.d ? Math.round(o.w / o.d * 100) : 0}%</td><td class="${sgn(o.pl)}">${usdS(o.pl)}</td></tr>`).join("")}</table>`;
     }).join("");
     $("mcFeel").innerHTML = html || `<div class="empty">진입 근거를 적을 때 심리·감정을 골라 두면,<br>어떤 마음일 때 결과가 좋았는지 여기서 보여줘요.</div>`;
   }
@@ -1603,7 +1610,7 @@
     const hc = hoursCfg(); $("mcFrom").value = hc.from; $("mcTo").value = hc.to;
     const from = daysAgo(29), es = entries(from).filter((e) => e.t.date >= from);
     const done = es.filter((e) => e.closed && e.pl != null);
-    const st2 = (arr) => { const n = arr.length, w = arr.filter((e) => e.pl > 0).length, pl = arr.reduce((a, e) => a + e.pl, 0); return n ? `${n}건 · 승률 ${Math.round(w / n * 100)}% · <b class="${sgn(pl)}">${usdS(pl)}</b>` : "없음"; };
+    const st2 = (arr) => { const n = arr.length, w = arr.filter((e) => e.win).length, d = arr.filter((e) => !e.be).length, pl = arr.reduce((a, e) => a + e.pl, 0); return n ? `${n}건 · 승률 ${d ? Math.round(w / d * 100) : 0}% · <b class="${sgn(pl)}">${usdS(pl)}</b>` : "없음"; };
     const rv = revenge(done).map((x) => x.e), rest = done.filter((e) => !rv.includes(e));
     const perDay = {}; for (const e of es) perDay[e.t.date] = (perDay[e.t.date] || 0) + 1;
     const busyDays = Object.keys(perDay).filter((d) => perDay[d] >= MIND.perDay);
@@ -1618,7 +1625,7 @@
       <span class="ind">└ 근거 적은 진입</span><b style="font-family:var(--font)">${st2(withB)}</b></div>
       <p class="mut sm" style="margin-bottom:0">경고 기준: 손절 후 ${MIND.cool}분 · 연속 손절 ${MIND.streak}번 · 하루 진입 ${MIND.perDay}번. 막지는 않고 알려만 줘요.</p>`;
     const w = weekStats(7);
-    $("taWeek").innerHTML = `<div class="kv"><span>종료한 매매</span><b>${w.n}건 · 수익 ${w.wins}건${w.n ? ` (${Math.round(w.wins / w.n * 100)}%)` : ""}</b>
+    $("taWeek").innerHTML = `<div class="kv"><span>종료한 매매</span><b>${w.n}건 · 수익 ${w.wins}건${w.be ? ` · 본절 ${w.be}건` : ""}${w.wins + w.loss ? ` (승률 ${Math.round(w.wins / (w.wins + w.loss) * 100)}%)` : ""}</b>
       <span>손익 (달러 환산)</span><b class="${sgn(w.pl || 0)}">${w.pl == null ? "—" : usd(w.pl)}</b>
       <span>근거 기록</span><b>${w.opened ? `${w.withBasis} / ${w.opened}건` : "—"}</b>
       <span>자주 나온 심리</span><b style="font-family:var(--font)">${esc(w.top.join(" · ") || "—")}</b></div>`;
@@ -1723,7 +1730,7 @@
   function talkContext() {
     const t = tiltScore(), w = weekStats(7), td = today(), L = [];
     L.push(`오늘 ${td} ${nowHM()} · 틸트 점수 ${t.v}/100${t.parts.length ? ` (${t.parts.map((p) => p.why).join(", ")})` : ""}`);
-    L.push(`최근 7일: 종료 ${w.n}건, 수익 ${w.wins}건, 손익 ${w.pl == null ? "모름" : (w.pl >= 0 ? "+" : "") + w.pl.toFixed(0) + "달러"}, 자주 나온 심리 ${w.top.join(", ") || "없음"}`);
+    L.push(`최근 7일: 종료 ${w.n}건, 수익 ${w.wins}건, 본절 ${w.be}건, 손익 ${w.pl == null ? "모름" : (w.pl >= 0 ? "+" : "") + w.pl.toFixed(0) + "달러"}, 자주 나온 심리 ${w.top.join(", ") || "없음"}`);
     const s = lossStreak(); if (s.n) L.push(`최근 연속 손절 ${s.n}번 (마지막 ${s.last})`);
     const op = st.trades.filter((x) => x.status === "open");
     for (const x of op) L.push(`진행 중: ${x.coin} ${sideName[x.side]} ${x.lev ? x.lev + "배 " : ""}진입 ${x.date}${x.why ? ` · 근거 "${x.why}"` : ""}${(x.mood || []).length ? ` · 심리 ${x.mood.join(", ")}` : ""}${x.feel && x.feel.chase ? ` · 되찾고 싶은 마음 ${x.feel.chase}` : ""}${(x.notes || []).length ? ` · 생각 "${x.notes[x.notes.length - 1].text}"` : ""}`);
